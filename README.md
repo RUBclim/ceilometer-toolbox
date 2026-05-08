@@ -126,6 +126,8 @@ The data is stored in a tree-like structure so filesystem performance remains hi
 access to ranges of data is fast. The `CeilometerArchive` instance allows interaction
 with the file tree, fully hiding its complexity.
 
+### Reading
+
 Any range of data can be accessed with a context manager like this:
 
 ```python
@@ -141,6 +143,65 @@ with archive.open_dataset(
 This will find and read all files needed to cover the range. This uses `dask` and this
 way avoids reading all files into memory at once, hence, long time periods can be loaded
 without the need for a lot of RAM.
+
+The archive may be queried for the latest date of a file type e.g. to determine where to
+continue processing.
+
+```python
+archive.latest_date(
+    device_id='IA',
+    file_type='L1',
+)
+```
+
+To e.g. speedup search one can set `from_date` for a start point in time to start
+looking backwards for the latest file of the specified type. This may be needed if
+historical data should be processed.
+
+You can also retrieve the raw list of files that cover the date ranges specified if you
+want to handle them manually using the `get_files` method.
+
+To check if an individual file exists you may use the `get_file_or_none` method.
+
+```python
+archive.get_file_or_none(device_id='IA', file_type='L1', file_date=datetime(2026, 5, 1))
+```
+
+This will return the full path to the matching file or `None` when the file does not
+exist.
+
+### Writing
+
+Adding files to the file tree can be done via `put_file` or `atomic_put_file`.
+
+```python
+archive.put_file(
+    device_id='IA',
+    file_type='L1',
+    file_date=datetime(2026, 5, 1),
+    override=True
+)
+```
+
+Since raw2l1 writes values consecutively to the file, this is not atomic. Trying to run
+any other call on a partially written file will fail.
+
+To ensure atomic writing use the `atomic_put_file` context manager. Which will first
+write to a temporary file and once finished replace/create the final file atomically.
+The context manager yields the file name of the temporary path. This may be passed to
+the tool as output file.
+
+```python
+with archive.atomic_put_file(
+    device_id='IA',
+    file_type='L1',
+    file_date=datetime(2026, 5, 1),
+    override=True
+) as f:
+   ...
+```
+
+Files may also be deleted using the `delete` method.
 
 ## Plotting data
 
@@ -159,7 +220,7 @@ ceilometer.beta_plot(
 )
 ```
 
-![](beta_plot.png)
+![](img/beta_plot.png)
 
 This automatically applies resampling (nearest) to allow plotting longer time series
 This can, however, be changes by passing a different function via `resampler=` e.g.
@@ -169,7 +230,7 @@ automatically taken into account and excluded, unless you set `filter_qc=False`.
 The maximum altitude can be set via `alt_max`. The linear depolarization plot has a
 similar interface, however, omitting the MLH, ABLH and CBH options.
 
-```
+```python
 ceilometer.ldr_plot(
     start_date=datetime(2026, 4, 28),
     end_date=datetime(2026, 5, 2),
@@ -178,7 +239,7 @@ ceilometer.ldr_plot(
 )
 ```
 
-![](ldr_plot.png)
+![](img/ldr_plot.png)
 
 ## References
 
