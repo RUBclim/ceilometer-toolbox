@@ -484,6 +484,56 @@ def test_stratfinder_in_docker_uses_cwd_when_no_directory_mount(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# stratfinder_local
+# ---------------------------------------------------------------------------
+
+def test_stratfinder_local_builds_command_with_all_optional_args():
+    result = mock.MagicMock()
+    result.returncode = 0
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+        return_value=result,
+    ) as run:
+        ret = Ceilometer.stratfinder_local(
+            executable_path='/usr/bin/stratfinder',
+            today_file='today.nc',
+            output_file='out.nc',
+            beta_file='beta.nc',
+            config_file='config.json',
+            yesterday_file='yesterday.nc',
+            overlap_file='overlap.nc',
+        )
+
+    assert ret == 0
+    cmd = run.call_args[0][0]
+    assert cmd[0] == '/usr/bin/stratfinder'
+    assert 'yesterday.nc' in cmd
+    assert 'overlap.nc' in cmd
+
+
+def test_stratfinder_local_builds_command_without_optional_args():
+    result = mock.MagicMock()
+    result.returncode = 42
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+        return_value=result,
+    ) as run:
+        ret = Ceilometer.stratfinder_local(
+            executable_path='/usr/bin/stratfinder',
+            today_file='today.nc',
+            output_file='out.nc',
+            beta_file='beta.nc',
+            config_file='config.json',
+        )
+
+    assert ret == 42
+    cmd = run.call_args[0][0]
+    assert repr('') in cmd
+
+
+# ---------------------------------------------------------------------------
 # process_l1_files
 # ---------------------------------------------------------------------------
 
@@ -541,6 +591,57 @@ def test_process_l1_files_uses_directory_mount_default(dirs, archive, monkeypatc
     assert ret == 0
     cmd = run.call_args[0][0]
     assert '/:/data' in cmd
+
+
+def test_process_l1_files_local_requires_executable_path(dirs, archive):
+    cel = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+        stratfinder_config_file='config.json',
+    )
+
+    l1_path = archive.put_file('IA', 'L1', '2026-03-25')
+    _touch(l1_path)
+
+    with pytest.raises(ValueError, match='executable_path must be provided'):
+        cel.process_l1_files(
+            start_date=date(2026, 3, 25),
+            end_date=date(2026, 3, 25),
+            in_docker=False,
+            directory_mount='/',
+        )
+
+
+def test_process_l1_files_local_runs_stratfinder_local(dirs, archive):
+    cel = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+        stratfinder_config_file='config.json',
+    )
+
+    l1_path = archive.put_file('IA', 'L1', '2026-03-25')
+    _touch(l1_path)
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+        return_value=mock_result,
+    ) as run:
+        ret = cel.process_l1_files(
+            start_date=date(2026, 3, 25),
+            end_date=date(2026, 3, 25),
+            in_docker=False,
+            executable_path='/usr/bin/stratfinder',
+            directory_mount='/',
+        )
+
+    assert ret == 0
+    cmd = run.call_args[0][0]
+    assert cmd[0] == '/usr/bin/stratfinder'
 
 
 def test_process_l1_files_raises_on_stratfinder_failure(dirs, archive):

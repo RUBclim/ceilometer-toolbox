@@ -418,12 +418,54 @@ class Ceilometer:
         result = subprocess.run(cmd, stdout=None, stderr=None)
         return result.returncode
 
+    @staticmethod
+    def stratfinder_local(
+            executable_path: str,
+            today_file: str,
+            output_file: str,
+            beta_file: str,
+            config_file: str,
+            yesterday_file: str | None = None,
+            overlap_file: str | None = None,
+    ) -> int:
+        """Run the stratfinder algorithm locally. This cannot be run in parallel since
+        it depends on the output of the previous day.
+
+        :param executable_path: The path to the stratfinder executable. This should be
+            the bash script that is provided along with the stratfinder Matlab
+            distribution.
+        :param config_file: The path to the stratfinder configuration file (json)
+        :param today_file: The path to the input file for the current day to
+            process. This should be a L1 file output from the raw2l1 tool.
+        :param output_file: Path to the output file for the stratfinder results.
+        :param beta_file: The path to the output file for the beta results
+            outputted by stratfinder.
+        :param yesterday_file: The path to the input file for the previous day to
+            process. This should be a L1 file output from the raw2l1 tool.
+        :param overlap_file: The path to the input file for the overlap correction.
+            This can be omitted if no overlap correction is desired.
+        """
+        cmd = (
+            executable_path,
+            config_file,
+            overlap_file or repr(''),
+            today_file,
+            output_file,
+            beta_file,
+            yesterday_file or repr(''),
+            repr(''),
+        )
+        result = subprocess.run(cmd, stdout=None, stderr=None)
+        return result.returncode
+
     def process_l1_files(
             self,
             start_date: date | str,
             end_date: date | str | None = None,
             config_file: str | None = None,
             directory_mount: str | None = None,
+            in_docker: bool = True,
+            executable_path: str | None = None,
     ) -> int:
         """Process the L1 files for the given date and all subsequent dates
         until end_date using the stratfinder algorithm.
@@ -433,6 +475,11 @@ class Ceilometer:
             continue until the current date.
         :param config_file: The path to the stratfinder configuration file (json).
         :param directory_mount: The directory to mount in the Docker container.
+        :param in_docker: Whether to run stratfinder in a Docker container or use a
+            local executable.
+        :param executable_path: The path to the local stratfinder executable. This is
+            only used if in_docker is False. This should be the bash script that is
+            provided along with the stratfinder Matlab distribution.
         """
         if isinstance(start_date, str):
             start_date = date.fromisoformat(start_date)
@@ -485,14 +532,28 @@ class Ceilometer:
                     override=True,
                 ) as beta_file,
             ):
-                ret = self.stratfinder_in_docker(
-                    config_file=config_file,
-                    today_file=today_file,
-                    output_file=output_file,
-                    beta_file=beta_file,
-                    yesterday_file=yesterday_file,
-                    directory_mount=directory_mount,
-                )
+                if in_docker:
+                    ret = self.stratfinder_in_docker(
+                        config_file=config_file,
+                        today_file=today_file,
+                        output_file=output_file,
+                        beta_file=beta_file,
+                        yesterday_file=yesterday_file,
+                        directory_mount=directory_mount,
+                    )
+                else:
+                    if not executable_path:
+                        raise ValueError(
+                            'executable_path must be provided if in_docker is False',
+                        )
+                    ret = self.stratfinder_local(
+                        executable_path=executable_path,
+                        config_file=config_file,
+                        today_file=today_file,
+                        output_file=output_file,
+                        beta_file=beta_file,
+                        yesterday_file=yesterday_file,
+                    )
                 if ret != 0:
                     print(f"Stratfinder failed for {start_date}, stopping")
                     raise RuntimeError(

@@ -88,7 +88,10 @@ pip install git+ssh://git@github.com/RUBclim/ceilometer-toolbox
    performance. Especially when the target or source is a mounted network drive.
 
 1. Now run `stratfinder` on the L1 data. This cannot be run in parallel, since it
-   depends on files from the previous day, which may not be ready.
+   depends on files from the previous day, which may not be ready. By default this will
+   run stratfinder in docker via the matlab runtime. If you have stratfinder already
+   setup locally, you may pass `in_docker=False` and set the `executable_path=...`. Then
+   no docker is needed.
 
    ```python
    ceilometer.process_l1_files(start_date='2026-05-06')
