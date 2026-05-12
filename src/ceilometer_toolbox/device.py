@@ -400,7 +400,6 @@ class Ceilometer:
             '-u',
             f"{os.getuid()}:{os.getgid()}",
             '--rm',
-            '-ti',
             '--workdir',
             '/data',
             '-v',
