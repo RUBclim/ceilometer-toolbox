@@ -336,7 +336,7 @@ class Ceilometer:
             config_file: str,
             yesterday_file: str | None = None,
             overlap_file: str | None = None,
-            container_image: str = 'stratfinder:latest',
+            container_image: str = 'ghcr.io/rubclim/stratfinder:latest',
             directory_mount: str | None = None,
     ) -> int:
         """Run the stratfinder algorithm in a Docker container. This cannot be run in
