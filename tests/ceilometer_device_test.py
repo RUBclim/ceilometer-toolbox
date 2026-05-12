@@ -416,7 +416,11 @@ def test_stratfinder_in_docker_rejects_relative_directory_mount():
         )
 
 
-def test_stratfinder_in_docker_builds_command_with_all_optional_args():
+def test_stratfinder_in_docker_builds_command_with_all_optional_args(
+        tmp_path,
+        monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
     result = mock.MagicMock()
     result.returncode = 0
 
@@ -431,7 +435,7 @@ def test_stratfinder_in_docker_builds_command_with_all_optional_args():
             config_file='config.json',
             yesterday_file='yesterday.nc',
             overlap_file='overlap.nc',
-            directory_mount='/data',
+            directory_mount=str(tmp_path),
             container_image='myimage:v1',
         )
 
@@ -442,7 +446,11 @@ def test_stratfinder_in_docker_builds_command_with_all_optional_args():
     assert 'myimage:v1' in cmd
 
 
-def test_stratfinder_in_docker_builds_command_without_optional_args():
+def test_stratfinder_in_docker_builds_command_without_optional_args(
+        tmp_path,
+        monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
     result = mock.MagicMock()
     result.returncode = 42
 
@@ -455,7 +463,7 @@ def test_stratfinder_in_docker_builds_command_without_optional_args():
             output_file='out.nc',
             beta_file='beta.nc',
             config_file='config.json',
-            directory_mount='/data',
+            directory_mount=str(tmp_path),
         )
 
     assert ret == 42
@@ -483,9 +491,71 @@ def test_stratfinder_in_docker_uses_cwd_when_no_directory_mount(monkeypatch):
     assert '/:/data' in cmd
 
 
+def test_stratfinder_in_docker_paths_are_above_directory_mount(tmp_path, monkeypatch):
+    wd = tmp_path / 'data' / 'subdir'
+    wd.mkdir(parents=True)
+    monkeypatch.chdir(wd)
+
+    with pytest.raises(
+        ValueError,
+        match='Input, output and config files must be located within the directory_mount',  # noqa: E501
+    ):
+        Ceilometer.stratfinder_in_docker(
+            today_file='../today.nc',
+            output_file='../out.nc',
+            beta_file='../beta.nc',
+            config_file='../config.json',
+            # mount is subdir itself, so ../today.nc goes above it
+            directory_mount=str(wd),
+        )
+
+
+def test_stratfinder_in_docker_paths_are_absolute_but_ok(tmp_path, monkeypatch):
+    wd = tmp_path / 'data' / 'subdir'
+    wd.mkdir(parents=True)
+    monkeypatch.chdir(wd)
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+    ) as run:
+        Ceilometer.stratfinder_in_docker(
+            today_file=os.path.join(str(wd), 'today.nc'),
+            output_file=os.path.join(str(wd), 'out.nc'),
+            beta_file=os.path.join(str(wd), 'beta.nc'),
+            config_file=os.path.join(str(wd), 'config.json'),
+            # we are in data but configs are below but abspaths
+            directory_mount=str(wd.parent),
+        )
+
+    cmd = run.call_args[0][0]
+    assert '/data/subdir/config.json' in cmd
+
+
+def test_stratfinder_in_docker_paths_are_absolute_but_parent_of_mount(
+        tmp_path,
+        monkeypatch,
+):
+    wd = tmp_path / 'data' / 'subdir'
+    wd.mkdir(parents=True)
+    monkeypatch.chdir(wd)
+
+    with pytest.raises(
+        ValueError,
+        match='Input, output and config files must be located within the directory_mount',  # noqa: E501
+    ):
+        Ceilometer.stratfinder_in_docker(
+            today_file=os.path.join(str(wd.parent), 'today.nc'),
+            output_file=os.path.join(str(wd.parent), 'out.nc'),
+            beta_file=os.path.join(str(wd.parent), 'beta.nc'),
+            config_file=os.path.join(str(wd.parent), 'config.json'),
+            # absolute paths in parent of mount → outside the mounted volume
+            directory_mount=str(wd),
+        )
+
 # ---------------------------------------------------------------------------
 # stratfinder_local
 # ---------------------------------------------------------------------------
+
 
 def test_stratfinder_local_builds_command_with_all_optional_args():
     result = mock.MagicMock()

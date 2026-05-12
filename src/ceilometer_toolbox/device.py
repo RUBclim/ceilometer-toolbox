@@ -367,30 +367,29 @@ class Ceilometer:
         if not os.path.isabs(local_dir):
             raise ValueError('directory_mount must be an absolute path')
 
-        # now modify the paths to match the docker container's file system, which
-        # is just the current working directory
-        today_file = os.path.join('/data', today_file)
-        output_file = os.path.join('/data', os.path.relpath(output_file))
-        beta_file = os.path.join('/data', os.path.relpath(beta_file))
-        yesterday_file = (
-            os.path.join(
-                '/data',
-                yesterday_file,
-            )
-            if yesterday_file
-            else None
-        )
-        overlap_file = (
-            os.path.join(
-                '/data',
-                overlap_file,
-            )
-            if overlap_file
-            else None
-        )
+        def _to_container_path(path: str) -> str:
+            abs_path = os.path.abspath(path)
+            rel = os.path.relpath(abs_path, local_dir)
+            if rel.startswith('..'):
+                raise ValueError(
+                    f'Input, output and config files must be located within the '
+                    f'directory_mount or its subdirectories. Moving above the mounted '
+                    f'directory is not possible. If this is needed, change your '
+                    f'directory_mount to a higher level directory that includes all '
+                    f'needed files. Offending path: {path!r}, relative path: {rel!r}',
+                )
+            return os.path.join('/data', rel)
 
-        # also adjust this path for the docker container
-        dyn_config = os.path.join('/data', config_file)
+        today_file = _to_container_path(today_file)
+        output_file = _to_container_path(output_file)
+        beta_file = _to_container_path(beta_file)
+        yesterday_file = _to_container_path(
+            yesterday_file,
+        ) if yesterday_file else None
+        overlap_file = _to_container_path(
+            overlap_file,
+        ) if overlap_file else None
+        dyn_config = _to_container_path(config_file)
 
         cmd = (
             'docker',
@@ -460,7 +459,7 @@ class Ceilometer:
 
     def process_l1_files(
             self,
-            start_date: date | str,
+            start_date: date | str | None = None,
             end_date: date | str | None = None,
             config_file: str | None = None,
             directory_mount: str | None = None,
@@ -481,6 +480,17 @@ class Ceilometer:
             only used if in_docker is False. This should be the bash script that is
             provided along with the stratfinder Matlab distribution.
         """
+        if start_date is None:
+            start_date_beta = self.archive.latest_date(
+                device_id=self.device_id,
+                file_type='L2A_beta',
+            ) or date(1970, 1, 1)
+            start_date_strat = self.archive.latest_date(
+                device_id=self.device_id,
+                file_type='L2A_stratfinder',
+            ) or date(1970, 1, 1)
+            start_date = min(start_date_beta, start_date_strat)
+
         if isinstance(start_date, str):
             start_date = date.fromisoformat(start_date)
 
@@ -566,7 +576,7 @@ class Ceilometer:
 
     def process_stratfinder_qc(
             self,
-            start_date: date | str,
+            start_date: date | str | None = None,
             end_date: date | str | None = None,
             config_file: str | None = None,
             value_config_file: str | None = None,
@@ -607,6 +617,12 @@ class Ceilometer:
                 'config_file, value_config_file and stratfinder_metadata_file must be '
                 'provided either in the method call or in the class initialization',
             )
+
+        if start_date is None:
+            start_date = self.archive.latest_date(
+                device_id=self.device_id,
+                file_type='L2B_stratfinder',
+            ) or date(1970, 1, 1)
 
         if isinstance(start_date, str):
             start_date = date.fromisoformat(start_date)
