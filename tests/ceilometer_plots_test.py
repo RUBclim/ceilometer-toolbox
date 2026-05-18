@@ -200,6 +200,48 @@ def test_beta_plot_filter_qc_false(tmp_path, ceilometer):
 
 
 # ---------------------------------------------------------------------------
+# beta_plot — L2A_beta coordinate fallback
+# ---------------------------------------------------------------------------
+
+def test_beta_plot_l2a_beta_coord_fallback(tmp_path, ceilometer):
+    # Exercises the except NotImplementedError branch: when station_latitude/
+    # longitude do not support .item() (e.g. time-varying coords in L2A_beta
+    # files), beta_plot falls back to .values[0].
+    times = [
+        np.datetime64('2026-03-25T23:30:00'),
+        np.datetime64('2026-03-26T00:30:00'),
+    ]
+    ds = xr.Dataset(
+        data_vars={
+            'beta': (['time', 'range'], np.full((2, 2), 1e-6)),
+            'station_latitude': (['time'], np.array([51.0, 51.0])),
+            'station_longitude': (['time'], np.array([7.0, 7.0])),
+        },
+        coords={'time': times, 'range': [100.0, 200.0]},
+    )
+
+    orig_item = xr.DataArray.item
+
+    def _raise_for_coord(self):
+        if self.name in ('station_latitude', 'station_longitude'):
+            raise NotImplementedError
+        return orig_item(self)
+
+    with mock.patch.object(
+        ceilometer.archive,
+        'open_dataset',
+        return_value=_fake_ctx(ds),
+    ):
+        with mock.patch.object(xr.DataArray, 'item', _raise_for_coord):
+            fig = ceilometer.beta_plot(
+                start_date=datetime(2026, 3, 25, 23, 0),
+                end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
+                output_path=str(tmp_path / 'beta_l2a_fallback.jpg'),
+            )
+    assert fig is not None
+
+
+# ---------------------------------------------------------------------------
 # ldr_plot
 # ---------------------------------------------------------------------------
 
@@ -238,6 +280,33 @@ def test_ldr_plot_30d(tmp_path, ceilometer):
         fig,
         baseline=os.path.join(PLOT_BASELINE, 'L1_ldr_30d.jpg'),
     )
+
+
+def test_ldr_plot_raises_when_linear_depol_ratio_missing(tmp_path, ceilometer):
+    # Exercises the KeyError branch added to ldr_plot when the dataset does
+    # not contain the linear_depol_ratio variable.
+    ds = xr.Dataset(
+        data_vars={
+            'station_latitude': xr.Variable([], 51.0),
+            'station_longitude': xr.Variable([], 7.0),
+        },
+        coords={'time': [np.datetime64('2026-03-26T00:00:00')]},
+    )
+
+    with mock.patch.object(
+        ceilometer.archive,
+        'open_dataset',
+        return_value=_fake_ctx(ds),
+    ):
+        with pytest.raises(
+            KeyError,
+            match='linear_depol_ratio variable is not available',
+        ):
+            ceilometer.ldr_plot(
+                start_date=datetime(2026, 3, 25, 23, 0),
+                end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
+                output_path=str(tmp_path / 'ldr_err.jpg'),
+            )
 
 
 # ---------------------------------------------------------------------------

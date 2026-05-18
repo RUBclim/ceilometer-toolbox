@@ -628,6 +628,17 @@ def test_stratfinder_local_builds_command_without_optional_args():
 # process_l1_files
 # ---------------------------------------------------------------------------
 
+def test_process_l1_files_uses_latest_dates_when_none(dirs, archive):
+    # No L2A files, both latest_date calls return None, fall back to 1970-01-01
+    cel = Ceilometer(
+        device_id='IA', input_dir=dirs['input_dir'], archive=archive,
+        stratfinder_config_file='config.json',
+    )
+    with freeze_time('1970-01-01 12:00:00'):
+        ret = cel.process_l1_files(start_date=None)
+    assert ret == 0
+
+
 def test_process_l1_files_requires_config_file(dirs, archive):
     cel = Ceilometer(
         device_id='IA', input_dir=dirs['input_dir'], archive=archive,
@@ -764,6 +775,21 @@ def test_process_l1_files_raises_on_stratfinder_failure(dirs, archive):
 # ---------------------------------------------------------------------------
 # process_stratfinder_qc
 # ---------------------------------------------------------------------------
+
+def test_process_stratfinder_qc_uses_latest_date_when_none(dirs, archive):
+    # No L2B files, latest_date returns None, falls back to 1970-01-01
+    cel = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+        stratfinder_config_file='config.json',
+        stratfinder_qc_value_config_file='values.toml',
+        stratfinder_qc_metadata_file='meta.toml',
+    )
+    with freeze_time('1970-01-01 12:00:00'):
+        ret = cel.process_stratfinder_qc(start_date=None)
+    assert ret == 0
+
 
 def test_process_stratfinder_qc_requires_all_config_files(dirs, archive):
     cel = Ceilometer(

@@ -872,6 +872,13 @@ class Ceilometer:
             # capture coordinates before selecting variables
             lat = float(ds['station_latitude'].item())
             lon = float(ds['station_longitude'].item())
+            if 'linear_depol_ratio' not in ds:
+                raise KeyError(
+                    'The linear_depol_ratio variable is not available in the dataset. '
+                    'This variable is only available in L1 files if the ceilometer '
+                    'supports measuring it. Please check if your device supports this'
+                    'variable.',
+                )
             ds = resampler(ds[['linear_depol_ratio']], delta)
 
             ds = ds.linear_depol_ratio.where(ds.linear_depol_ratio < 0.69).where(
@@ -889,6 +896,7 @@ class Ceilometer:
                 },
                 cmap=LDR_CMAP,
                 ax=ax,
+                **kwargs,
             )
             add_solar_times(ax, ds, lat=lat, lon=lon)
 
