@@ -384,12 +384,8 @@ class Ceilometer:
         today_file = _to_container_path(today_file)
         output_file = _to_container_path(output_file)
         beta_file = _to_container_path(beta_file)
-        yesterday_file = _to_container_path(
-            yesterday_file,
-        ) if yesterday_file else None
-        overlap_file = _to_container_path(
-            overlap_file,
-        ) if overlap_file else None
+        yesterday_file = _to_container_path(yesterday_file) if yesterday_file else None
+        overlap_file = _to_container_path(overlap_file) if overlap_file else None
         dyn_config = _to_container_path(config_file)
 
         cmd = (
@@ -465,6 +461,7 @@ class Ceilometer:
             directory_mount: str | None = None,
             in_docker: bool = True,
             executable_path: str | None = None,
+            overlap_file: str | None = None,
     ) -> int:
         """Process the L1 files for the given date and all subsequent dates
         until end_date using the stratfinder algorithm.
@@ -479,6 +476,8 @@ class Ceilometer:
         :param executable_path: The path to the local stratfinder executable. This is
             only used if in_docker is False. This should be the bash script that is
             provided along with the stratfinder Matlab distribution.
+        :param overlap_file: The path to the input file for the overlap correction.
+            This can be omitted if no overlap correction is desired.
         """
         if start_date is None:
             start_date_beta = self.archive.latest_date(
@@ -549,6 +548,7 @@ class Ceilometer:
                         output_file=output_file,
                         beta_file=beta_file,
                         yesterday_file=yesterday_file,
+                        overlap_file=overlap_file,
                         directory_mount=directory_mount,
                     )
                 else:
@@ -563,6 +563,7 @@ class Ceilometer:
                         output_file=output_file,
                         beta_file=beta_file,
                         yesterday_file=yesterday_file,
+                        overlap_file=overlap_file,
                     )
                 if ret != 0:
                     print(f"Stratfinder failed for {start_date}, stopping")

@@ -62,6 +62,9 @@ parallel = true
 plugins = ["covdefaults"]
 omit = ["example.py"]
 
+[tool.autopep8]
+max_line_length = 88
+
 [tool.mypy]
 check_untyped_defs = true
 disallow_any_generics = true
