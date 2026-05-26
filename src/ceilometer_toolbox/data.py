@@ -60,6 +60,9 @@ def atomic_write_path(
         if os.path.exists(tmp_path.name):
             if os.path.exists(final_path) and not override:
                 raise FileExistsError(f'File already exists: {final_path}')
+            # change file permission to 0o644 to be readable by other users, which
+            # is the usual umask
+            os.chmod(tmp_path.name, 0o644)
             os.replace(tmp_path.name, final_path)
 
 

@@ -1,4 +1,5 @@
 import os
+import stat
 from datetime import date
 from datetime import datetime
 from unittest import mock
@@ -429,6 +430,10 @@ def test_atomic_write_path_publishes_file_on_success(tmp_path):
 
     with open(final_path, encoding='utf-8') as file:
         assert file.read() == 'ok'
+
+    file_stats = os.stat(final_path)
+    # the default umask of NamedTemporaryFile is 0o600, but we want 0o644
+    assert oct(stat.S_IMODE(file_stats.st_mode)) == '0o644'
 
 
 def test_atomic_write_path_removes_staged_file_when_exception(tmp_path):
