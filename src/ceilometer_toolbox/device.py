@@ -1,10 +1,12 @@
 import os
+import re
 import subprocess
 import tempfile
 from collections.abc import Callable
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
+from functools import lru_cache
 from glob import glob
 from multiprocessing import Pool
 from typing import Any
@@ -24,6 +26,13 @@ from qc_sf_python.qc_daily_final import qc_daily_final
 from raw2l1.raw2l1 import raw2l1
 
 
+@lru_cache(maxsize=None)
+def _file_date_pattern(prefix: str) -> re.Pattern[str]:
+    """Compile (and cache) the regex matching ``{prefix}YYYYMMDD_HHMMSS`` for the
+    given prefix. Cached so we don't recompile on every filename parse."""
+    return re.compile(rf"{re.escape(prefix)}(\d{{8}}_\d{{6}})")
+
+
 class Ceilometer:
     """Class for processing ceilometer data and making plots."""
 
@@ -36,6 +45,9 @@ class Ceilometer:
             stratfinder_config_file: str | None = None,
             stratfinder_qc_value_config_file: str | None = None,
             stratfinder_qc_metadata_file: str | None = None,
+            calibration_profile_beta: xr.DataArray | None = None,
+            calibration_profile_x_pol: xr.DataArray | None = None,
+            calibration_profile_p_pol: xr.DataArray | None = None,
     ) -> None:
         """
         :param device_id: The ID of the ceilometer device to process. This should
@@ -55,6 +67,16 @@ class Ceilometer:
             config file (.toml).
         :param stratfinder_qc_metadata_file: The path to the stratfinder QC
             metadata (.toml)
+        :param calibration_profile_beta: Median dark measurement profile
+            subtracted from ``beta`` during L1 processing. When ``None`` no
+            correction is applied. Typically obtained from
+            :meth:`derive_median_dark_measurement_profile`.
+        :param calibration_profile_x_pol: Same as ``calibration_profile_beta``
+            but for the cross-polarization component (subtracted from
+            ``rcs_2``). Only meaningful for polarization-capable devices.
+        :param calibration_profile_p_pol: Same as ``calibration_profile_beta``
+            but for the parallel-polarization component (subtracted from
+            ``rcs_1``). Only meaningful for polarization-capable devices.
         """
         self.archive = archive
         self.input_dir = input_dir
@@ -63,6 +85,9 @@ class Ceilometer:
         self.stratfinder_config_file = stratfinder_config_file
         self.stratfinder_qc_value_config_file = stratfinder_qc_value_config_file
         self.stratfinder_qc_metadata_file = stratfinder_qc_metadata_file
+        self.calibration_profile_beta = calibration_profile_beta
+        self.calibration_profile_x_pol = calibration_profile_x_pol
+        self.calibration_profile_p_pol = calibration_profile_p_pol
 
     def glob_day_raw_data(self, file_date: date, prefix: str) -> list[str]:
         """Glob the raw ceilometer files for a given date and prefix.
@@ -80,6 +105,47 @@ class Ceilometer:
             ),
         )
 
+    def _parse_file_date_from_name(self, file_name: str, prefix: str) -> datetime:
+        """Parse the date and time from a raw file name.
+
+        :param file_name: The name of the file to parse. This should be the full path
+            to the file, but only the file name will be used for parsing.
+        :param prefix: The prefix of the files. This is usually ``live_`` for raw
+            files, but may be different if the naming convention is different.
+        :return: The parsed date and time as a datetime object.
+        :raises ValueError: if the file name does not match the expected
+            ``{prefix}YYYYMMDD_HHMMSS`` pattern.
+        """
+        match = _file_date_pattern(prefix).search(file_name)
+        if match is None:
+            raise ValueError(
+                f'Could not parse date from file name: {file_name!r} '
+                f'with prefix {prefix!r}',
+            )
+        return datetime.strptime(match.group(1), '%Y%m%d_%H%M%S')
+
+    def get_raw_files(self, start: datetime, end: datetime, prefix: str) -> list[str]:
+        # let's first glob to the closest common pattern
+        common_part = os.path.commonprefix([
+            f'{prefix}{start:%Y%m%d_%H%M%S}',
+            f'{prefix}{end:%Y%m%d_%H%M%S}',
+        ])
+        globbed_files = sorted(glob(os.path.join(self.input_dir, f"{common_part}*.nc")))
+        final_files = []
+        # now select the files precisely based on the name
+        for f in globbed_files:
+            f_date = self._parse_file_date_from_name(f, prefix=prefix)
+            # we need one more file after the last one since the last part will
+            # be written after the cut off date
+            if start <= f_date <= end:
+                final_files.append(f)
+
+        # get the index of the last file included
+        idx_last_file = globbed_files.index(final_files[-1]) + 1
+        if idx_last_file < len(globbed_files):
+            final_files.append(globbed_files[idx_last_file])
+        return final_files
+
     def to_l1(
             self,
             file_date: date,
@@ -94,6 +160,9 @@ class Ceilometer:
             log_file: str | None = None,
             log_level: str = 'info',
             verbose: str = 'info',
+            calibration_profile_beta: xr.DataArray | None = None,
+            calibration_profile_x_pol: xr.DataArray | None = None,
+            calibration_profile_p_pol: xr.DataArray | None = None,
     ) -> int:
         """Convert raw ceilometer files to level 1 using the raw2l1 tool.
 
@@ -116,9 +185,24 @@ class Ceilometer:
         :param log_level: Level of logs store in the log file. Choices are debug, info,
             warning, error, critical
         :param verbose: Level of verbose in the terminal. Same choices as log_level
+        :param calibration_profile_beta: Override for
+            ``self.calibration_profile_beta``. When the resolved profile is not
+            ``None`` it is subtracted from ``beta`` after raw2l1 has run.
+        :param calibration_profile_x_pol: Override for
+            ``self.calibration_profile_x_pol``. Subtracted from ``rcs_2`` when
+            present.
+        :param calibration_profile_p_pol: Override for
+            ``self.calibration_profile_p_pol``. Subtracted from ``rcs_1`` when
+            present.
 
         :return: The return code of the raw2l1 tool, 0 if successful, non-zero otherwise
         """
+        if calibration_profile_beta is None:
+            calibration_profile_beta = self.calibration_profile_beta
+        if calibration_profile_x_pol is None:
+            calibration_profile_x_pol = self.calibration_profile_x_pol
+        if calibration_profile_p_pol is None:
+            calibration_profile_p_pol = self.calibration_profile_p_pol
         if not config_file:
             config_file = self.raw2l1_config_file
 
@@ -183,6 +267,42 @@ class Ceilometer:
                     f"raw2l1 failed with return code {ret}, "
                     f"see log file {log_file} for details",
                 )
+            any_calibration = any(
+                p is not None
+                for p in (
+                    calibration_profile_beta,
+                    calibration_profile_x_pol,
+                    calibration_profile_p_pol,
+                )
+            )
+            if any_calibration:
+                # TODO: this creates some IO overhead
+                with xr.open_dataset(tmp_file) as ds:
+                    ds = ds.load()
+
+                # Mapping from raw-file variable name (which is what the
+                # calibration profile was derived against) to its corresponding
+                # L1 variable name written by raw2l1.
+                calibrations = (
+                    ('beta', calibration_profile_beta),
+                    ('rcs_2', calibration_profile_x_pol),
+                    ('rcs_1', calibration_profile_p_pol),
+                )
+                rcs_calibrated = set()
+                for l1_var, profile in calibrations:
+                    if profile is None or l1_var not in ds:
+                        continue
+                    # NaN / inf in the profile mean "no information for this
+                    # gate" — treat as a zero correction.
+                    correction = profile.where(np.isfinite(profile), 0)
+                    ds[l1_var] = ds[l1_var] - correction
+                    rcs_calibrated.add(l1_var)
+
+                if {'rcs_1', 'rcs_2'} <= rcs_calibrated:
+                    ds['ldr'] = ds['rcs_2'] / ds['rcs_1']
+                # write the calibrated dataset back to the original output file
+                ds.to_netcdf(tmp_file, mode='w')
+                # now let the atomic write happen
             return ret
 
     def process_raw_files(
@@ -192,6 +312,9 @@ class Ceilometer:
             prefix: str = 'live_',
             jobs: int = 1,
             config_file: str | None = None,
+            calibration_profile_beta: xr.DataArray | None = None,
+            calibration_profile_x_pol: xr.DataArray | None = None,
+            calibration_profile_p_pol: xr.DataArray | None = None,
     ) -> int:
         """Process raw ceilometer files since a given date and convert them to level 1.
 
@@ -206,7 +329,19 @@ class Ceilometer:
         :param jobs: The number of parallel processes to use for processing the files.
         :param config_file: Option to override the raw2l1 configuration file provided
             in the class initialization.
+        :param calibration_profile_beta: Override for
+            ``self.calibration_profile_beta`` for this call. See :meth:`to_l1`.
+        :param calibration_profile_x_pol: Override for
+            ``self.calibration_profile_x_pol`` for this call.
+        :param calibration_profile_p_pol: Override for
+            ``self.calibration_profile_p_pol`` for this call.
         """
+        if calibration_profile_beta is None:
+            calibration_profile_beta = self.calibration_profile_beta
+        if calibration_profile_x_pol is None:
+            calibration_profile_x_pol = self.calibration_profile_x_pol
+        if calibration_profile_p_pol is None:
+            calibration_profile_p_pol = self.calibration_profile_p_pol
         if not config_file:
             config_file = self.raw2l1_config_file
 
@@ -296,6 +431,9 @@ class Ceilometer:
                 ),
                 'filter_day': True,
                 'log_level': 'info',
+                'calibration_profile_beta': calibration_profile_beta,
+                'calibration_profile_x_pol': calibration_profile_x_pol,
+                'calibration_profile_p_pol': calibration_profile_p_pol,
             }
             if jobs > 1:
                 tasks.append(kwargs)
@@ -321,6 +459,9 @@ class Ceilometer:
                         None,
                         task['log_level'],
                         'info',
+                        task['calibration_profile_beta'],
+                        task['calibration_profile_x_pol'],
+                        task['calibration_profile_p_pol'],
                     )
                     for task in tasks
                 ]
@@ -678,6 +819,159 @@ class Ceilometer:
             start_date += timedelta(days=1)
         return ret
 
+    def derive_median_dark_measurement_profile(
+            self,
+            start_date: datetime,
+            prefix: str = 'live_',
+            discard_window: timedelta = timedelta(minutes=20),
+            calibration_window: timedelta = timedelta(minutes=30),
+            window_tolerance: timedelta = timedelta(seconds=30),
+            smooth_window: int = 10,
+            smooth_above: float = 200,
+    ) -> xr.Dataset:
+        """Derive the median dark measurement profile from a hood measurement
+        starting at ``start_date``. The first ``discard_window`` is discarded to
+        let the sensor settle (Kotthaus et al. 2016), then ``calibration_window``
+        of data is used to compute the median.
+
+        The internally applied range and overlap corrections are reversed before
+        taking the median, and for range gates above ``smooth_above`` a
+        right-aligned running mean of width ``smooth_window`` is applied.
+
+        Available components (``beta_att``, ``x_pol``, ``p_pol``) are written to
+        ``self.calibration_profile_beta`` / ``_x_pol`` / ``_p_pol`` as
+        ``DataArray`` s with ``float32`` range coordinate so they line up
+        exactly with raw L1 ``range`` during the subtraction.
+
+        :param start_date: Start of the hood measurement.
+        :param prefix: Raw file name prefix.
+        :param discard_window: Duration discarded at the start of the hood
+            measurement to let the sensor settle.
+        :param calibration_window: Duration of data used for the median.
+        :param window_tolerance: Tolerance added to the observed time span when
+            checking that it covers ``calibration_window`` (accounts for the
+            granularity of timestamps in the raw files).
+        :param smooth_window: Width of the right-aligned running mean (in range
+            gates) applied above ``smooth_above``.
+        :param smooth_above: Range (in m) above which smoothing is applied.
+        :return: Dataset containing the smoothed median dark measurement
+            profile for whichever of ``beta_att`` / ``x_pol`` / ``p_pol`` were
+            present in the raw files.
+        """
+        _start = start_date + discard_window
+        _end = _start + calibration_window
+        files_needed = self.get_raw_files(_start, _end, prefix=prefix)
+        print(
+            f'getting {len(files_needed)} files for deriving the median dark '
+            f'measurement profile',
+        )
+        with xr.open_mfdataset(
+            paths=files_needed,
+            combine='by_coords',
+            data_vars='minimal',
+            coords='minimal',
+            compat='override',
+        ).sel(time=slice(_start, _end)) as ds:
+            # check what period we actually got and add some tolerance
+            time_delta = (ds.time.max() - ds.time.min()).values + \
+                np.timedelta64(window_tolerance)
+            if time_delta < np.timedelta64(calibration_window):
+                raise ValueError(
+                    f"The calibration window of {calibration_window.seconds / 60:.1f} "
+                    f"minutes could not be filled with data. The actual time range "
+                    f"covered by the files is only "
+                    f"{time_delta / np.timedelta64(1, 'm'):.1f} minutes. Consider "
+                    f"reducing the discard_window or calibration_window, or check if "
+                    f"the raw files are correctly stored in the input directory.",
+                )
+            alc_vars = ('beta_att', 'x_pol', 'p_pol')
+            for var in alc_vars:
+                if var in ds:
+                    # 1. reverse the range correction
+                    ds[var] = ds[var] / (ds['range'] ** 2)
+                    if 'overlap_function' in ds and ds.overlap_is_corrected == 1:
+                        # 2. reverse the overlap correction if available. If not
+                        # available, it is has likely not been applied yet
+                        ds[var] = ds[var] * ds['overlap_function'].fillna(1.0)
+
+            present = [var for var in alc_vars if var in ds]
+            median_profiles = ds[present].median(dim='time')
+            smoothed = median_profiles.rolling(range=smooth_window).mean()
+            median_profiles = smoothed.where(
+                median_profiles['range'] > smooth_above,
+                median_profiles,
+            )
+            # range comes back as float64 after the arithmetic above; cast to
+            # float32 so it aligns exactly with the float32 range coord on raw
+            # L1 datasets during calibration subtraction.
+            median_profiles = median_profiles.assign_coords(
+                range=median_profiles['range'].astype('float32'),
+            )
+
+        self.calibration_profile_beta = (
+            median_profiles['beta_att'] if 'beta_att' in median_profiles else None
+        )
+        self.calibration_profile_x_pol = (
+            median_profiles['x_pol'] if 'x_pol' in median_profiles else None
+        )
+        self.calibration_profile_p_pol = (
+            median_profiles['p_pol'] if 'p_pol' in median_profiles else None
+        )
+        return median_profiles
+
+    def median_over_range_plot(
+            self,
+            profile: xr.Dataset,
+            output_path: str,
+            alt_max: int | None = None,
+            **kwargs: dict[str, Any],
+    ) -> Figure:
+        fig, axs = plt.subplots(ncols=3, figsize=(12, 8), sharey=True)
+        if 'beta_att' in profile:
+            profile.beta_att.plot.line(
+                y='range',
+                ax=axs[0],
+                label='beta_att',
+                color='black',
+                lw=0.4,
+                **kwargs,
+            )
+            axs[0].set_xlabel(r'$\beta\;(m^{-1}\,sr^{-1})$')
+        if 'x_pol' in profile:
+            profile.x_pol.plot.line(
+                y='range',
+                ax=axs[1],
+                label='x_pol',
+                color='blue',
+                lw=0.4,
+                **kwargs,
+            )
+            axs[1].set_xlabel(r'$\beta_{xpol}\;(m^{-1}\,sr^{-1})$')
+        if 'p_pol' in profile:
+            profile.p_pol.plot.line(
+                y='range',
+                ax=axs[2],
+                label='p_pol',
+                color='green',
+                lw=0.4,
+                **kwargs,
+            )
+            axs[2].set_xlabel(r'$\beta_{ppol}\;(m^{-1}\,sr^{-1})$')
+        for ax in axs:
+            ax.set_title(None)
+            ax.set_ylabel(None)
+            ax.axvline(0, color='black', label='surface', zorder=0)
+            ax.set_xlim(-1e-14, 1e-13)
+            ax.set_axisbelow(True)
+            ax.grid()
+            if alt_max is not None:
+                ax.set_ylim(0, alt_max)
+
+        axs[0].set_ylabel('Range (m)')
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=200, bbox_inches='tight')
+        return fig
+
     def beta_plot(
             self,
             start_date: datetime,
@@ -821,8 +1115,8 @@ class Ceilometer:
                         linewidth=0.5,
                         s=20,
                     )
-                ax.set_title(None)
 
+        ax.set_title(None)
         ax.set_ylabel('altitude (m agl)')
         ax.set_xlabel('time (UTC)')
         ax.legend(loc='upper right')
