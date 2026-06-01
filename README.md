@@ -246,7 +246,7 @@ ceilometer.ldr_plot(
 
 ## Dark measurement profile
 
-Dark measurement profiles can be derived from periods of clear nighttime skys or using
+Dark measurement profiles can be derived from periods of clear nighttime skies or using
 an optical termination hood mimicking full atmospheric attenuation to derive the
 internal background noise for $\beta$, $\beta_{xpol}$, and $\beta_{ppol}$. This closely
 follows Kotthaus et al. 2016 and Looschelders et al. 2025.
@@ -290,7 +290,7 @@ profiles = ceilometer.derive_median_dark_measurement_profile(
 )
 # create a plot from the derived background noise
 ceilometer.median_over_range_plot(
-   profile=profiles,
+   profiles=profiles,
    output_path='median_over_range_plot.png',
 )
 # save the profile to disk for later use
@@ -303,14 +303,14 @@ profiles.to_netcdf('median_dark_measurement_profile.nc')
 
 When a calibration profile is specified in the class instance, the `.to_l1` and
 `.process_raw_files` method will subtract this profile during creation of the L1 data.
-This is applied to `rcs_1`, `rcs_2`, and `beta` while `rcs_0` and `ldra` are recomputed
+This is applied to `rcs_1`, `rcs_2`, and `beta` while `rcs_0` and `ldr` are recomputed
 from the adjusted `rcs_1` and `rcs_2` before being saved to the L1 file.
 
 ## References
 
 Kotthaus, S., O’Connor, E., Münkel, C., Charlton-Perez, C., Haeffelin, M., Gabey, A. M.,
 & Grimmond, C. S. B. (2016). Recommendations for processing atmospheric attenuated
-backscatter profilesfrom Vaisala CL31 ceilometers. Atmospheric Measurement Techniques,
+backscatter profiles from Vaisala CL31 ceilometers. Atmospheric Measurement Techniques,
 9(8), 3769–3791. https://doi.org/10.5194/amt-9-3769-2016
 
 Kotthaus, S., Haeffelin, M., Drouin, M.-A., Dupont, J.-C., Grimmond, S., Haefele, A.,

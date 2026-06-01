@@ -1149,8 +1149,8 @@ def test_derive_median_dark_measurement_profile(dirs, archive):
     profiles = ceilometer.derive_median_dark_measurement_profile(
         start_date=datetime(2026, 3, 25, 23, 30, 0),
     )
-    expected_profile = xr.open_dataset('testing/dark_profile_baseline.nc')
-    assert_equal(profiles, expected_profile)
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as expected_profile:
+        assert_equal(profiles, expected_profile)
 
 
 def test_derive_median_dark_measurement_profile_period_too_short(dirs, archive):
@@ -1181,10 +1181,10 @@ def test_derive_median_dark_measurement_profile_overlap_not_reversed(dirs, archi
     profiles = ceilometer.derive_median_dark_measurement_profile(
         start_date=datetime(2026, 3, 25, 23, 30, 0),
     )
-    expected_profile = xr.open_dataset(
+    with xr.open_dataset(
         'testing/dark_profile_overlap_not_reversed_baseline.nc',
-    )
-    assert_equal(profiles, expected_profile)
+    ) as expected_profile:
+        assert_equal(profiles, expected_profile)
 
 
 def test_derive_median_dark_measurement_profile_no_polarization(dirs, archive):
@@ -1201,10 +1201,10 @@ def test_derive_median_dark_measurement_profile_no_polarization(dirs, archive):
     profiles = ceilometer.derive_median_dark_measurement_profile(
         start_date=datetime(2026, 3, 25, 23, 30, 0),
     )
-    expected_profile = xr.open_dataset(
+    with xr.open_dataset(
         'testing/dark_profile_no_polarization_baseline.nc',
-    )
-    assert_equal(profiles, expected_profile)
+    ) as expected_profile:
+        assert_equal(profiles, expected_profile)
 
 
 def test_parse_file_date_from_name(ceilometer):

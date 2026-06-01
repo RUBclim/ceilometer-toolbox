@@ -970,7 +970,7 @@ class Ceilometer:
             axs = [axs]
         else:
             raise ValueError(
-                "The profile must contain at least 'beta_att' to be plotted."
+                "The profile must contain at least 'beta_att' to be plotted. "
                 "The presence of 'x_pol' and 'p_pol' is optional but if they are "
                 "present, 'beta_att' must also be present.",
             )
