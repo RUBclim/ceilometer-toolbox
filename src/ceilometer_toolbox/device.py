@@ -21,6 +21,7 @@ from ceilometer_toolbox.data import CeilometerArchive
 from ceilometer_toolbox.utils import add_solar_times
 from ceilometer_toolbox.utils import LDR_CMAP
 from ceilometer_toolbox.utils import resample_dataset
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from qc_sf_python.qc_daily_final import qc_daily_final
 from raw2l1.raw2l1 import raw2l1
@@ -300,6 +301,7 @@ class Ceilometer:
 
                 if {'rcs_1', 'rcs_2'} <= rcs_calibrated:
                     ds['ldr'] = ds['rcs_2'] / ds['rcs_1']
+                    ds['rcs_0'] = ds['rcs_1'] + ds['rcs_2']
                 # write the calibrated dataset back to the original output file
                 ds.to_netcdf(tmp_file, mode='w')
                 # now let the atomic write happen
@@ -885,14 +887,22 @@ class Ceilometer:
                     f"the raw files are correctly stored in the input directory.",
                 )
             alc_vars = ('beta_att', 'x_pol', 'p_pol')
+            # Reverse the overlap correction only if it was actually applied;
+            # collapse the (time-invariant) function to a range-only profile so
+            # it broadcasts cleanly both here and when it is re-applied below.
+            overlap_reversed = (
+                'overlap_function' in ds and ds.overlap_is_corrected == 1
+            )
+            overlap_profile = None
+            if overlap_reversed:
+                overlap_profile = ds['overlap_function'].fillna(1.0)
             for var in alc_vars:
                 if var in ds:
                     # 1. reverse the range correction
                     ds[var] = ds[var] / (ds['range'] ** 2)
-                    if 'overlap_function' in ds and ds.overlap_is_corrected == 1:
-                        # 2. reverse the overlap correction if available. If not
-                        # available, it is has likely not been applied yet
-                        ds[var] = ds[var] * ds['overlap_function'].fillna(1.0)
+                    # 2. reverse the overlap correction if it was applied
+                    if overlap_reversed:
+                        ds[var] = ds[var] * overlap_profile
 
             present = [var for var in alc_vars if var in ds]
             median_profiles = ds[present].median(dim='time')
@@ -921,14 +931,51 @@ class Ceilometer:
 
     def median_over_range_plot(
             self,
-            profile: xr.Dataset,
             output_path: str,
+            profiles: xr.Dataset | None = None,
             alt_max: int | None = None,
             **kwargs: dict[str, Any],
     ) -> Figure:
-        fig, axs = plt.subplots(ncols=3, figsize=(12, 8), sharey=True)
-        if 'beta_att' in profile:
-            profile.beta_att.plot.line(
+        """Make a plot of the median dark measurement profile over range.
+
+        :param output_path: The path to save the plot to.
+        :param profiles: The dataset containing the profiles to plot. If ``None``,
+            the profiles stored in the class instance (e.g. from a previous call to
+            ``derive_median_dark_measurement_profile``) will be used. This allows
+            plotting of any profile.
+        :param alt_max: The maximum altitude to plot. If ``None``, the maximum altitude
+            in the dataset will be used.
+        :param kwargs: Additional keyword arguments to pass to the xarray plotting
+            function. This can be used to customize the plot.
+        :return: The figure object of the plot.
+        """
+        if profiles is not None:
+            beta_att_profile = profiles.beta_att
+            x_pol_profile = profiles.x_pol
+            p_pol_profile = profiles.p_pol
+        else:
+            beta_att_profile = self.calibration_profile_beta
+            x_pol_profile = self.calibration_profile_x_pol
+            p_pol_profile = self.calibration_profile_p_pol
+
+        axs: list[Axes]
+        if (
+            beta_att_profile is not None
+            and x_pol_profile is not None
+            and p_pol_profile is not None
+        ):
+            fig, axs = plt.subplots(ncols=3, figsize=(12, 8), sharey=True)
+        elif beta_att_profile is not None:
+            fig, axs = plt.subplots(ncols=1, figsize=(4, 8), sharey=True)
+            axs = [axs]
+        else:
+            raise ValueError(
+                "The profile must contain at least 'beta_att' to be plotted."
+                "The presence of 'x_pol' and 'p_pol' is optional but if they are "
+                "present, 'beta_att' must also be present.",
+            )
+        if beta_att_profile is not None:
+            beta_att_profile.plot.line(
                 y='range',
                 ax=axs[0],
                 label='beta_att',
@@ -937,8 +984,8 @@ class Ceilometer:
                 **kwargs,
             )
             axs[0].set_xlabel(r'$\beta\;(m^{-1}\,sr^{-1})$')
-        if 'x_pol' in profile:
-            profile.x_pol.plot.line(
+        if x_pol_profile is not None:
+            x_pol_profile.plot.line(
                 y='range',
                 ax=axs[1],
                 label='x_pol',
@@ -947,8 +994,8 @@ class Ceilometer:
                 **kwargs,
             )
             axs[1].set_xlabel(r'$\beta_{xpol}\;(m^{-1}\,sr^{-1})$')
-        if 'p_pol' in profile:
-            profile.p_pol.plot.line(
+        if p_pol_profile is not None:
+            p_pol_profile.plot.line(
                 y='range',
                 ax=axs[2],
                 label='p_pol',
