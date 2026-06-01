@@ -950,9 +950,9 @@ class Ceilometer:
         :return: The figure object of the plot.
         """
         if profiles is not None:
-            beta_att_profile = profiles.beta_att
-            x_pol_profile = profiles.x_pol
-            p_pol_profile = profiles.p_pol
+            beta_att_profile = profiles.get('beta_att')
+            x_pol_profile = profiles.get('x_pol')
+            p_pol_profile = profiles.get('p_pol')
         else:
             beta_att_profile = self.calibration_profile_beta
             x_pol_profile = self.calibration_profile_x_pol
@@ -974,16 +974,15 @@ class Ceilometer:
                 "The presence of 'x_pol' and 'p_pol' is optional but if they are "
                 "present, 'beta_att' must also be present.",
             )
-        if beta_att_profile is not None:
-            beta_att_profile.plot.line(
-                y='range',
-                ax=axs[0],
-                label='beta_att',
-                color='black',
-                lw=0.4,
-                **kwargs,
-            )
-            axs[0].set_xlabel(r'$\beta\;(m^{-1}\,sr^{-1})$')
+        beta_att_profile.plot.line(
+            y='range',
+            ax=axs[0],
+            label='beta_att',
+            color='black',
+            lw=0.4,
+            **kwargs,
+        )
+        axs[0].set_xlabel(r'$\beta\;(m^{-1}\,sr^{-1})$')
         if x_pol_profile is not None:
             x_pol_profile.plot.line(
                 y='range',

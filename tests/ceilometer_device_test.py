@@ -2,6 +2,8 @@ import os
 import shutil
 import tempfile
 from datetime import date
+from datetime import datetime
+from datetime import timedelta
 from unittest import mock
 
 import pytest
@@ -9,6 +11,7 @@ import xarray as xr
 from ceilometer_toolbox.data import CeilometerArchive
 from ceilometer_toolbox.device import Ceilometer
 from freezegun import freeze_time
+from xarray.testing import assert_equal
 
 _HERE = os.path.dirname(__file__)
 _ROOT = os.path.join(_HERE, '..')
@@ -213,6 +216,50 @@ def test_to_l1_raises_for_failing_raw2l1(dirs, ceilometer):
     assert os.path.exists(output_file) is False
 
 
+def test_to_l1_with_calibration_profiles(dirs, ceilometer):
+    _copy_input_fixtures(dirs['input_dir'])
+    output_file = os.path.join(dirs['output_dir'], 'calibrated_L1.nc')
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        ret = ceilometer.to_l1(
+            file_date=date(2026, 3, 25),
+            input_files=[
+                os.path.join(dirs['input_dir'], 'live_20260325_235741.nc'),
+                os.path.join(dirs['input_dir'], 'live_20260326_001241.nc'),
+            ],
+            output_file=output_file,
+            config_file=RAW2L1_CONF,
+            filter_day=True,
+            calibration_profile_beta=profiles['beta_att'],
+            calibration_profile_p_pol=profiles['p_pol'],
+            calibration_profile_x_pol=profiles['x_pol'],
+        )
+
+    assert ret == 0
+    # TODO: test how values are actually applied and that calculations are correct!
+    assert os.path.exists(output_file)
+
+
+def test_to_l1_with_calibration_profiles_only_beta(dirs, ceilometer):
+    _copy_input_fixtures(dirs['input_dir'])
+    output_file = os.path.join(dirs['output_dir'], 'calibrated_L1.nc')
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        ret = ceilometer.to_l1(
+            file_date=date(2026, 3, 25),
+            input_files=[
+                os.path.join(dirs['input_dir'], 'live_20260325_235741.nc'),
+                os.path.join(dirs['input_dir'], 'live_20260326_001241.nc'),
+            ],
+            output_file=output_file,
+            config_file=RAW2L1_CONF,
+            filter_day=True,
+            calibration_profile_beta=profiles['beta_att'],
+        )
+
+    assert ret == 0
+    # TODO: test how values are actually applied and that calculations are correct!
+    assert os.path.exists(output_file)
+
+
 # ---------------------------------------------------------------------------
 # process_raw_files
 # ---------------------------------------------------------------------------
@@ -223,6 +270,22 @@ def test_process_raw_files_with_explicit_config_file(dirs, ceilometer):
         ret = ceilometer.process_raw_files(
             start_date=date(2026, 3, 26),
             config_file=RAW2L1_CONF,
+        )
+    assert ret == 0
+
+
+def test_process_raw_files_with_calibration_provided(dirs, ceilometer):
+    # Exercises the False branch of `if not config_file:` in process_raw_files
+    with (
+        xr.open_dataset('testing/dark_profile_baseline.nc') as profiles,
+        freeze_time('2026-03-25 12:00:00'),
+    ):
+        ret = ceilometer.process_raw_files(
+            start_date=date(2026, 3, 26),
+            config_file=RAW2L1_CONF,
+            calibration_profile_beta=profiles['beta_att'],
+            calibration_profile_p_pol=profiles['p_pol'],
+            calibration_profile_x_pol=profiles['x_pol'],
         )
     assert ret == 0
 
@@ -1074,3 +1137,76 @@ def test_two_devices_in_same_archive_are_independent(dirs, archive):
     archive.delete_file('IA', 'L1', '2026-03-25')
     assert archive.get_file_or_none('IA', 'L1', '2026-03-25') is None
     assert archive.get_file_or_none('IB', 'L1', '2026-03-25') is not None
+
+
+def test_derive_median_dark_measurement_profile(dirs, archive):
+    _copy_input_fixtures(dirs['input_dir'])
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+    profiles = ceilometer.derive_median_dark_measurement_profile(
+        start_date=datetime(2026, 3, 25, 23, 30, 0),
+    )
+    expected_profile = xr.open_dataset('testing/dark_profile_baseline.nc')
+    assert_equal(profiles, expected_profile)
+
+
+def test_derive_median_dark_measurement_profile_period_too_short(dirs, archive):
+    _copy_input_fixtures(dirs['input_dir'])
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+    with pytest.raises(ValueError, match='could not be filled with data'):
+        ceilometer.derive_median_dark_measurement_profile(
+            start_date=datetime(2026, 3, 25, 23, 30, 0),
+            calibration_window=timedelta(minutes=60),
+        )
+
+
+def test_derive_median_dark_measurement_profile_overlap_not_reversed(dirs, archive):
+    _copy(
+        'testing/live_20260325_235741_no_overlap.nc',
+        os.path.join(dirs['input_dir'], 'live_20260325_235741.nc'),
+    )
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+
+    profiles = ceilometer.derive_median_dark_measurement_profile(
+        start_date=datetime(2026, 3, 25, 23, 30, 0),
+    )
+    expected_profile = xr.open_dataset(
+        'testing/dark_profile_overlap_not_reversed_baseline.nc',
+    )
+    assert_equal(profiles, expected_profile)
+
+
+def test_derive_median_dark_measurement_profile_no_polarization(dirs, archive):
+    _copy(
+        'testing/live_20260325_235741_no_polarization.nc',
+        os.path.join(dirs['input_dir'], 'live_20260325_235741.nc'),
+    )
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+
+    profiles = ceilometer.derive_median_dark_measurement_profile(
+        start_date=datetime(2026, 3, 25, 23, 30, 0),
+    )
+    expected_profile = xr.open_dataset(
+        'testing/dark_profile_no_polarization_baseline.nc',
+    )
+    assert_equal(profiles, expected_profile)
+
+
+def test_parse_file_date_from_name(ceilometer):
+    with pytest.raises(ValueError, match='Could not parse date from file name'):
+        ceilometer._parse_file_date_from_name('invalid_filename.nc', prefix='')

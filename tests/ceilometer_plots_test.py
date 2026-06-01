@@ -302,6 +302,71 @@ def test_ldr_plot_raises_when_linear_depol_ratio_missing(tmp_path, ceilometer):
             )
 
 
+def test_median_over_range_plot_all_vars(tmp_path, ceilometer):
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        fig = ceilometer.median_over_range_plot(
+            output_path=str(tmp_path / 't.jpg'),
+            profiles=profiles,
+        )
+    assert_plot_is_equal(
+        fig,
+        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot.png'),
+    )
+
+
+def test_median_over_range_plot_all_vars_alt_max(tmp_path, ceilometer):
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        fig = ceilometer.median_over_range_plot(
+            output_path=str(tmp_path / 't.jpg'),
+            profiles=profiles,
+            alt_max=2000,
+        )
+    assert_plot_is_equal(
+        fig,
+        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot_2000m.png'),
+    )
+
+
+def test_median_over_range_plot_all_vars_missing_beta_att(tmp_path, ceilometer):
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        del profiles['beta_att']
+        with pytest.raises(
+            ValueError,
+            match="The profile must contain at least 'beta_att' to be plotted.",
+        ):
+            ceilometer.median_over_range_plot(
+                output_path=str(tmp_path / 't.jpg'),
+                profiles=profiles,
+            )
+
+
+def test_median_over_range_plot_all_vars_profiles_set_in_instance(tmp_path, ceilometer):
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        ceilometer.calibration_profile_beta = profiles['beta_att']
+        ceilometer.calibration_profile_x_pol = profiles['x_pol']
+        ceilometer.calibration_profile_p_pol = profiles['p_pol']
+        fig = ceilometer.median_over_range_plot(output_path=str(tmp_path / 't.jpg'))
+    assert_plot_is_equal(
+        fig,
+        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot.png'),
+    )
+
+
+def test_median_over_range_plot_only_beta(tmp_path, ceilometer):
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
+        del profiles['x_pol']
+        del profiles['p_pol']
+        fig = ceilometer.median_over_range_plot(
+            output_path=str(tmp_path / 't.jpg'),
+            profiles=profiles,
+        )
+
+    assert_plot_is_equal(
+        fig,
+        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot_only_beta.png'),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helper: fake context manager wrapping a dataset
 # ---------------------------------------------------------------------------

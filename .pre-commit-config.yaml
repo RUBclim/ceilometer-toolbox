@@ -10,7 +10,7 @@ repos:
     -   id: name-tests-test
     -   id: debug-statements
     -   id: check-added-large-files
-        args: [--maxkb=7000]
+        args: [--maxkb=9000]
     -   id: requirements-txt-fixer
     -   id: double-quote-string-fixer
     -   id: check-merge-conflict
