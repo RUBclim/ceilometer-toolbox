@@ -282,7 +282,7 @@ After creation they are automatically assigned to the class. And applied.
 ```python
 profiles = ceilometer.derive_median_dark_measurement_profile(
    # start of the period where the termination hood was put up
-   start_date=datetime(2026, 5, 28, 8, 39, 0),
+   periods=datetime(2026, 5, 28, 8, 39, 0),
    # discard the first time period and let the instrument settle
    discard_window=timedelta(minutes=20),
    # use the subsequent time period for deriving the median profile
@@ -298,6 +298,28 @@ profiles.to_netcdf('median_dark_measurement_profile.nc')
 ```
 
 ![](img/median_dark_measurement_profile.png)
+
+If you have taken multiple hood measurements across a longer time span, you may specify
+those in the following way. Please note that you will have to **manually** take care of
+the discard window and calibration window.
+
+This is a fully manual override: `discard_window`, `calibration_window` and the
+validation of the length of the period is completely bypassed. You are on your own here!
+
+```python
+profiles = ceilometer.derive_median_dark_measurement_profile(
+   periods=[
+      (
+         datetime(2026, 5, 28, 8, 12, 0),
+         datetime(2026, 5, 28, 8, 12, 30),
+      ),
+      (
+         datetime(2026, 5, 28, 15, 15, 20),
+         datetime(2026, 5, 28, 8, 15, 50),
+      ),
+   ],
+)
+```
 
 ### Removal of background noise
 

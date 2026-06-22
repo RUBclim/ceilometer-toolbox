@@ -1147,10 +1147,82 @@ def test_derive_median_dark_measurement_profile(dirs, archive):
         archive=archive,
     )
     profiles = ceilometer.derive_median_dark_measurement_profile(
-        start_date=datetime(2026, 3, 25, 23, 30, 0),
+        periods=datetime(2026, 3, 25, 23, 30, 0),
     )
     with xr.open_dataset('testing/dark_profile_baseline.nc') as expected_profile:
         assert_equal(profiles, expected_profile)
+
+
+def test_derive_median_dark_measurement_profile_multiple_periods(dirs, archive):
+    _copy_input_fixtures(dirs['input_dir'])
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+    profiles = ceilometer.derive_median_dark_measurement_profile(
+        # these form the exact same periods as the single-period test, just split
+        periods=[
+            (
+                datetime(2026, 3, 25, 23, 50, 0),
+                datetime(2026, 3, 26, 0, 10, 0),
+            ),
+            (
+                datetime(2026, 3, 26, 0, 10, 0),
+                datetime(2026, 3, 26, 0, 20, 0),
+            ),
+        ],
+    )
+    with xr.open_dataset('testing/dark_profile_baseline.nc') as expected_profile:
+        assert_equal(profiles, expected_profile)
+
+
+def test_derive_median_dark_measurement_profile_multiple_periods_invalid_periods(
+        dirs,
+        archive,
+):
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+    with pytest.raises(ValueError, match='Periods must not overlap'):
+        ceilometer.derive_median_dark_measurement_profile(
+            # these form the exact same periods as the single-period test, just split
+            periods=[
+                (
+                    datetime(2026, 3, 25, 23, 50, 0),
+                    # overlaps with start of next period!
+                    datetime(2026, 3, 26, 0, 15, 0),
+                ),
+                (
+                    datetime(2026, 3, 26, 0, 10, 0),
+                    datetime(2026, 3, 26, 0, 20, 0),
+                ),
+            ],
+        )
+
+
+def test_derive_median_dark_measurement_profile_multiple_periods_invalid_start_end(
+        dirs,
+        archive,
+):
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+    with pytest.raises(ValueError, match='must be before end date'):
+        ceilometer.derive_median_dark_measurement_profile(
+            # these form the exact same periods as the single-period test, just split
+            periods=[
+                (
+                    datetime(2026, 3, 26, 23, 50, 0),
+                    # start before end
+                    datetime(2026, 3, 24, 0, 15, 0),
+                ),
+            ],
+        )
 
 
 def test_derive_median_dark_measurement_profile_period_too_short(dirs, archive):
@@ -1162,7 +1234,7 @@ def test_derive_median_dark_measurement_profile_period_too_short(dirs, archive):
     )
     with pytest.raises(ValueError, match='could not be filled with data'):
         ceilometer.derive_median_dark_measurement_profile(
-            start_date=datetime(2026, 3, 25, 23, 30, 0),
+            periods=datetime(2026, 3, 25, 23, 30, 0),
             calibration_window=timedelta(minutes=60),
         )
 
@@ -1179,7 +1251,7 @@ def test_derive_median_dark_measurement_profile_overlap_not_reversed(dirs, archi
     )
 
     profiles = ceilometer.derive_median_dark_measurement_profile(
-        start_date=datetime(2026, 3, 25, 23, 30, 0),
+        periods=datetime(2026, 3, 25, 23, 30, 0),
     )
     with xr.open_dataset(
         'testing/dark_profile_overlap_not_reversed_baseline.nc',
@@ -1199,7 +1271,7 @@ def test_derive_median_dark_measurement_profile_no_polarization(dirs, archive):
     )
 
     profiles = ceilometer.derive_median_dark_measurement_profile(
-        start_date=datetime(2026, 3, 25, 23, 30, 0),
+        periods=datetime(2026, 3, 25, 23, 30, 0),
     )
     with xr.open_dataset(
         'testing/dark_profile_no_polarization_baseline.nc',

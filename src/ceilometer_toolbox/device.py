@@ -825,9 +825,24 @@ class Ceilometer:
             start_date += timedelta(days=1)
         return ret
 
+    def _validate_periods(self, periods: list[tuple[datetime, datetime]]) -> None:
+        # check that start is before end
+        for start, end in periods:
+            if start >= end:
+                raise ValueError(
+                    f"Period start date {start} must be before end date {end}",
+                )
+        # check that periods do not overlap
+        sorted_periods = sorted(periods, key=lambda x: x[0])
+        for (start1, end1), (start2, end2) in zip(sorted_periods, sorted_periods[1:]):
+            if end1 > start2:
+                raise ValueError(
+                    f"Periods must not overlap: {start1} - {end1} | {start2} - {end2}",
+                )
+
     def derive_median_dark_measurement_profile(
             self,
-            start_date: datetime,
+            periods: list[tuple[datetime, datetime]] | datetime,
             prefix: str = 'live_',
             discard_window: timedelta = timedelta(minutes=20),
             calibration_window: timedelta = timedelta(minutes=30),
@@ -849,7 +864,15 @@ class Ceilometer:
         ``DataArray`` s with ``float32`` range coordinate so they line up
         exactly with raw L1 ``range`` during the subtraction.
 
-        :param start_date: Start of the hood measurement.
+        :param periods: Can be a single start of a hood measurement, but if multiple
+            were performed it can be a list of several periods represented as
+            ``[(start, end), (start, end), ...]``. If a single datetime or string is
+            provided, it will be treated as the start of a single hood measurement,
+            and the end will be inferred as
+            ``start + discard_window + calibration_window``. If multiple periods are
+            provided, the median will be taken over the combined data from all periods.
+            To allow for a very precise selection of  periods, ``discard_window`` and
+            ``calibration_window`` are ignored when the inputs are provided as periods.
         :param prefix: Raw file name prefix.
         :param discard_window: Duration discarded at the start of the hood
             measurement to let the sensor settle.
@@ -864,63 +887,74 @@ class Ceilometer:
             profile for whichever of ``beta_att`` / ``x_pol`` / ``p_pol`` were
             present in the raw files.
         """
-        _start = start_date + discard_window
-        _end = _start + calibration_window
-        files_needed = self.get_raw_files(_start, _end, prefix=prefix)
-        print(
-            f'getting {len(files_needed)} files for deriving the median dark '
-            f'measurement profile',
-        )
-        with xr.open_mfdataset(
-            paths=files_needed,
-            combine='by_coords',
-            data_vars='minimal',
-            coords='minimal',
-            compat='override',
-        ).sel(time=slice(_start, _end)) as ds:
-            # check what period we actually got and add some tolerance
-            time_delta = (ds.time.max() - ds.time.min()).values + \
-                np.timedelta64(window_tolerance)
-            if time_delta < np.timedelta64(calibration_window):
-                raise ValueError(
-                    f"The calibration window of {calibration_window.seconds / 60:.1f} "
-                    f"minutes could not be filled with data. The actual time range "
-                    f"covered by the files is only "
-                    f"{time_delta / np.timedelta64(1, 'm'):.1f} minutes. Consider "
-                    f"reducing the discard_window or calibration_window, or check if "
-                    f"the raw files are correctly stored in the input directory.",
+        prepped_ds = []
+        auto_raning = False
+        if isinstance(periods, datetime):
+            auto_raning = True
+            start = periods + discard_window
+            end = start + calibration_window
+            periods = [(start, end)]
+        self._validate_periods(periods)
+        for (_start, _end) in periods:
+            files_needed = self.get_raw_files(_start, _end, prefix=prefix)
+            print(
+                f'getting {len(files_needed)} files for deriving the median dark '
+                f'measurement profile',
+            )
+            with xr.open_mfdataset(
+                paths=files_needed,
+                combine='by_coords',
+                data_vars='minimal',
+                coords='minimal',
+                compat='override',
+            ).sel(time=slice(_start, _end)) as ds:
+                # check what period we actually got and add some tolerance
+                time_delta = (ds.time.max() - ds.time.min()).values + \
+                    np.timedelta64(window_tolerance)
+                if auto_raning and (time_delta < np.timedelta64(calibration_window)):
+                    raise ValueError(
+                        f"The calibration window of {calibration_window.seconds / 60:.1f} "  # noqa: E501
+                        f"minutes could not be filled with data. The actual time range "
+                        f"covered by the files is only "
+                        f"{time_delta / np.timedelta64(1, 'm'):.1f} minutes. Consider "
+                        f"reducing the discard_window or calibration_window, or check "
+                        f"if the raw files are correctly stored in the "
+                        f"input directory.",
+                    )
+                alc_vars = ('beta_att', 'x_pol', 'p_pol')
+                # Reverse the overlap correction only if it was actually applied;
+                # collapse the (time-invariant) function to a range-only profile so
+                # it broadcasts cleanly both here and when it is re-applied below.
+                overlap_reversed = (
+                    'overlap_function' in ds and ds.overlap_is_corrected == 1
                 )
-            alc_vars = ('beta_att', 'x_pol', 'p_pol')
-            # Reverse the overlap correction only if it was actually applied;
-            # collapse the (time-invariant) function to a range-only profile so
-            # it broadcasts cleanly both here and when it is re-applied below.
-            overlap_reversed = (
-                'overlap_function' in ds and ds.overlap_is_corrected == 1
-            )
-            overlap_profile = None
-            if overlap_reversed:
-                overlap_profile = ds['overlap_function'].fillna(1.0)
-            for var in alc_vars:
-                if var in ds:
-                    # 1. reverse the range correction
-                    ds[var] = ds[var] / (ds['range'] ** 2)
-                    # 2. reverse the overlap correction if it was applied
-                    if overlap_reversed:
-                        ds[var] = ds[var] * overlap_profile
+                overlap_profile = None
+                if overlap_reversed:
+                    overlap_profile = ds['overlap_function'].fillna(1.0)
+                for var in alc_vars:
+                    if var in ds:
+                        # 1. reverse the range correction
+                        ds[var] = ds[var] / (ds['range'] ** 2)
+                        # 2. reverse the overlap correction if it was applied
+                        if overlap_reversed:
+                            ds[var] = ds[var] * overlap_profile
 
-            present = [var for var in alc_vars if var in ds]
-            median_profiles = ds[present].median(dim='time')
-            smoothed = median_profiles.rolling(range=smooth_window).mean()
-            median_profiles = smoothed.where(
-                median_profiles['range'] > smooth_above,
-                median_profiles,
-            )
-            # range comes back as float64 after the arithmetic above; cast to
-            # float32 so it aligns exactly with the float32 range coord on raw
-            # L1 datasets during calibration subtraction.
-            median_profiles = median_profiles.assign_coords(
-                range=median_profiles['range'].astype('float32'),
-            )
+                prepped_ds.append(ds.load())
+
+        ds = xr.concat(prepped_ds, dim='time', data_vars='minimal')
+        present = [var for var in alc_vars if var in ds]
+        median_profiles = ds[present].median(dim='time')
+        smoothed = median_profiles.rolling(range=smooth_window).mean()
+        median_profiles = smoothed.where(
+            median_profiles['range'] > smooth_above,
+            median_profiles,
+        )
+        # range comes back as float64 after the arithmetic above; cast to
+        # float32 so it aligns exactly with the float32 range coord on raw
+        # L1 datasets during calibration subtraction.
+        median_profiles = median_profiles.assign_coords(
+            range=median_profiles['range'].astype('float32'),
+        )
 
         self.calibration_profile_beta = (
             median_profiles['beta_att'] if 'beta_att' in median_profiles else None
