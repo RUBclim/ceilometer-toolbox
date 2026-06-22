@@ -141,6 +141,10 @@ class Ceilometer:
             if start <= f_date <= end:
                 final_files.append(f)
 
+        if not final_files:
+            raise ValueError(
+                f'No files found between {start} and {end} with prefix {prefix!r}',
+            )
         # get the index of the last file included
         idx_last_file = globbed_files.index(final_files[-1]) + 1
         if idx_last_file < len(globbed_files):
@@ -294,12 +298,12 @@ class Ceilometer:
                     if profile is None or l1_var not in ds:
                         continue
                     # NaN / inf in the profile mean "no information for this
-                    # gate" — treat as a zero correction.
+                    # gate" - treat as a zero correction.
                     correction = profile.where(np.isfinite(profile), 0)
                     ds[l1_var] = ds[l1_var] - correction
                     rcs_calibrated.add(l1_var)
 
-                if {'rcs_1', 'rcs_2'} <= rcs_calibrated:
+                if rcs_calibrated & {'rcs_1', 'rcs_2'} and {'rcs_1', 'rcs_2'} <= set(ds):  # noqa: E501
                     ds['ldr'] = ds['rcs_2'] / ds['rcs_1']
                     ds['rcs_0'] = ds['rcs_1'] + ds['rcs_2']
                 # write the calibrated dataset back to the original output file
