@@ -1225,6 +1225,27 @@ def test_derive_median_dark_measurement_profile_multiple_periods_invalid_start_e
         )
 
 
+def test_derive_median_dark_measurement_profile_no_data_found(
+        dirs,
+        archive,
+):
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+    )
+    with pytest.raises(ValueError, match='No files found between'):
+        ceilometer.derive_median_dark_measurement_profile(
+            # these form the exact same periods as the single-period test, just split
+            periods=[
+                (
+                    datetime(2026, 3, 1, 23, 20, 0),
+                    datetime(2026, 3, 1, 23, 50, 0),
+                ),
+            ],
+        )
+
+
 def test_derive_median_dark_measurement_profile_period_too_short(dirs, archive):
     _copy_input_fixtures(dirs['input_dir'])
     ceilometer = Ceilometer(
