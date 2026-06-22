@@ -2,6 +2,7 @@ import os
 from contextlib import contextmanager
 from datetime import datetime
 from datetime import timedelta
+from functools import partial
 from unittest import mock
 
 import numpy as np
@@ -9,15 +10,12 @@ import pytest
 import xarray as xr
 from ceilometer_toolbox.data import CeilometerArchive
 from ceilometer_toolbox.device import Ceilometer
+from matplotlib.testing.decorators import image_comparison
 
-from testing.utils import assert_plot_is_equal
 
 _HERE = os.path.dirname(__file__)
 _ROOT = os.path.join(_HERE, '..')
 TESTING_OUTPUT = os.path.abspath(os.path.join(_ROOT, 'testing', 'output'))
-PLOT_BASELINE = os.path.abspath(
-    os.path.join(_ROOT, 'testing', 'plot_baseline'),
-)
 
 
 @pytest.fixture
@@ -30,50 +28,50 @@ def ceilometer():
     )
 
 
+img_comp = partial(
+    image_comparison,
+    style='mpl20',
+    tol=0,
+    savefig_kwarg={'bbox_inches': 'tight', 'dpi': 120},
+)
+
 # ---------------------------------------------------------------------------
 # beta_plot
 # ---------------------------------------------------------------------------
 
+
+@img_comp(['L1_beta_1d.png'])
 def test_beta_plot_1d(tmp_path, ceilometer):
-    fig = ceilometer.beta_plot(
+    ceilometer.beta_plot(
         start_date=datetime(2026, 3, 25, 23, 0),
         end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
         output_path=str(tmp_path / 'L1_beta_1d.jpg'),
         beta_file_type='L1',
     )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'L1_beta_1d.jpg'),
-    )
 
 
+@img_comp(['L1_beta_1d_alt_max.png'])
 def test_beta_plot_1d_alt_max(tmp_path, ceilometer):
-    fig = ceilometer.beta_plot(
+    ceilometer.beta_plot(
         start_date=datetime(2026, 3, 25, 23, 0),
         end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
         output_path=str(tmp_path / 'L1_beta_1d_alt_max.jpg'),
         alt_max=4500,
         beta_file_type='L1',
     )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'L1_beta_1d_alt_max.jpg'),
-    )
 
 
+@img_comp(['L1_beta_30d.png'])
 def test_beta_plot_30d(tmp_path, ceilometer):
-    fig = ceilometer.beta_plot(
+    ceilometer.beta_plot(
         start_date=datetime(2026, 3, 25, 23, 0),
         end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=30),
         output_path=str(tmp_path / 'L1_beta_30d.jpg'),
         beta_file_type='L1',
     )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'L1_beta_30d.jpg'),
-    )
 
 
+@img_comp(['beta_ablh.png'])
 def test_beta_plot_show_ablh(tmp_path, ceilometer):
     strat_ds = xr.Dataset(
         data_vars={
@@ -106,15 +104,15 @@ def test_beta_plot_show_ablh(tmp_path, ceilometer):
             _fake_ctx(strat_ds),
         ],
     ):
-        fig = ceilometer.beta_plot(
+        ceilometer.beta_plot(
             start_date=datetime(2026, 3, 25, 23, 0),
             end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
             output_path=str(tmp_path / 'beta_ablh.jpg'),
             show_ablh=True,
         )
-    assert fig is not None
 
 
+@img_comp(['beta_mlh_cbh.png'])
 def test_beta_plot_show_mlh_and_cbh(tmp_path, ceilometer):
     strat_ds = xr.Dataset(
         data_vars={
@@ -151,16 +149,16 @@ def test_beta_plot_show_mlh_and_cbh(tmp_path, ceilometer):
             _fake_ctx(strat_ds),
         ],
     ):
-        fig = ceilometer.beta_plot(
+        ceilometer.beta_plot(
             start_date=datetime(2026, 3, 25, 23, 0),
             end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
             output_path=str(tmp_path / 'beta_mlh_cbh.jpg'),
             show_mlh=True,
             show_cbh=True,
         )
-    assert fig is not None
 
 
+@img_comp(['beta_no_qc.png'])
 def test_beta_plot_filter_qc_false(tmp_path, ceilometer):
     strat_ds = xr.Dataset(
         data_vars={
@@ -189,20 +187,20 @@ def test_beta_plot_filter_qc_false(tmp_path, ceilometer):
             _fake_ctx(strat_ds),
         ],
     ):
-        fig = ceilometer.beta_plot(
+        ceilometer.beta_plot(
             start_date=datetime(2026, 3, 25, 23, 0),
             end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
             output_path=str(tmp_path / 'beta_no_qc.jpg'),
             show_ablh=True,
             filter_qc=False,
         )
-    assert fig is not None
 
 
 # ---------------------------------------------------------------------------
 # beta_plot — L2A_beta coordinate fallback
 # ---------------------------------------------------------------------------
 
+@img_comp(['beta_l2a_fallback.png'])
 def test_beta_plot_l2a_beta_coord_fallback(tmp_path, ceilometer):
     # Exercises the except NotImplementedError branch: when station_latitude/
     # longitude do not support .item() (e.g. time-varying coords in L2A_beta
@@ -226,52 +224,42 @@ def test_beta_plot_l2a_beta_coord_fallback(tmp_path, ceilometer):
         return_value=_fake_ctx(ds),
     ):
         with mock.patch.object(xr.DataArray, 'item', side_effect=NotImplementedError):
-            fig = ceilometer.beta_plot(
+            ceilometer.beta_plot(
                 start_date=datetime(2026, 3, 25, 23, 0),
                 end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
                 output_path=str(tmp_path / 'beta_l2a_fallback.jpg'),
             )
-    assert fig is not None
 
 
 # ---------------------------------------------------------------------------
 # ldr_plot
 # ---------------------------------------------------------------------------
 
+@img_comp(['L1_ldr_1d.png'])
 def test_ldr_plot_1d(tmp_path, ceilometer):
-    fig = ceilometer.ldr_plot(
+    ceilometer.ldr_plot(
         start_date=datetime(2026, 3, 25, 23, 0),
         end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
         output_path=str(tmp_path / 'L1_ldr_1d.jpg'),
     )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'L1_ldr_1d.jpg'),
-    )
 
 
+@img_comp(['L1_ldr_1d_alt_max.png'])
 def test_ldr_plot_1d_alt_max(tmp_path, ceilometer):
-    fig = ceilometer.ldr_plot(
+    ceilometer.ldr_plot(
         start_date=datetime(2026, 3, 25, 23, 0),
         end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
         output_path=str(tmp_path / 'L1_ldr_1d_alt_max.jpg'),
         alt_max=4500,
     )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'L1_ldr_1d_alt_max.jpg'),
-    )
 
 
+@img_comp(['L1_ldr_30d.png'])
 def test_ldr_plot_30d(tmp_path, ceilometer):
-    fig = ceilometer.ldr_plot(
+    ceilometer.ldr_plot(
         start_date=datetime(2026, 3, 25, 23, 0),
         end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=30),
         output_path=str(tmp_path / 'L1_ldr_30d.jpg'),
-    )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'L1_ldr_30d.jpg'),
     )
 
 
@@ -302,29 +290,23 @@ def test_ldr_plot_raises_when_linear_depol_ratio_missing(tmp_path, ceilometer):
             )
 
 
+@img_comp(['median_over_range_plot.png'])
 def test_median_over_range_plot_all_vars(tmp_path, ceilometer):
     with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
-        fig = ceilometer.median_over_range_plot(
+        ceilometer.median_over_range_plot(
             output_path=str(tmp_path / 't.jpg'),
             profiles=profiles,
         )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot.png'),
-    )
 
 
+@img_comp(['median_over_range_plot_2000m.png'])
 def test_median_over_range_plot_all_vars_alt_max(tmp_path, ceilometer):
     with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
-        fig = ceilometer.median_over_range_plot(
+        ceilometer.median_over_range_plot(
             output_path=str(tmp_path / 't.jpg'),
             profiles=profiles,
             alt_max=2000,
         )
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot_2000m.png'),
-    )
 
 
 def test_median_over_range_plot_all_vars_missing_beta_att(tmp_path, ceilometer):
@@ -340,31 +322,24 @@ def test_median_over_range_plot_all_vars_missing_beta_att(tmp_path, ceilometer):
             )
 
 
+@img_comp(['median_over_range_plot_all_vars_profiles_set_in_instance.png'])
 def test_median_over_range_plot_all_vars_profiles_set_in_instance(tmp_path, ceilometer):
     with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
         ceilometer.calibration_profile_beta = profiles['beta_att']
         ceilometer.calibration_profile_x_pol = profiles['x_pol']
         ceilometer.calibration_profile_p_pol = profiles['p_pol']
-        fig = ceilometer.median_over_range_plot(output_path=str(tmp_path / 't.jpg'))
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot.png'),
-    )
+        ceilometer.median_over_range_plot(output_path=str(tmp_path / 't.jpg'))
 
 
+@img_comp(['median_over_range_plot_only_beta.png'])
 def test_median_over_range_plot_only_beta(tmp_path, ceilometer):
     with xr.open_dataset('testing/dark_profile_baseline.nc') as profiles:
         del profiles['x_pol']
         del profiles['p_pol']
-        fig = ceilometer.median_over_range_plot(
+        ceilometer.median_over_range_plot(
             output_path=str(tmp_path / 't.jpg'),
             profiles=profiles,
         )
-
-    assert_plot_is_equal(
-        fig,
-        baseline=os.path.join(PLOT_BASELINE, 'median_over_range_plot_only_beta.png'),
-    )
 
 
 # ---------------------------------------------------------------------------
