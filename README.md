@@ -244,9 +244,103 @@ ceilometer.ldr_plot(
 
 ![](img/ldr_plot.png)
 
+## Dark measurement profile
+
+Dark measurement profiles can be derived from periods of clear nighttime skies or using
+an optical termination hood mimicking full atmospheric attenuation to derive the
+internal background noise for $\beta$, $\beta_{xpol}$, and $\beta_{ppol}$. This closely
+follows Kotthaus et al. 2016 and Looschelders et al. 2025.
+
+If you already have a profile, you can pass this when creating an instance of the class:
+
+```python
+import xarray as xr
+from ceilometer_toolbox import Ceilometer
+from ceilometer_toolbox import CeilometerArchive
+
+profiles = xr.open_dataset('median_dark_measurement_profile.nc')
+
+archive = CeilometerArchive('ceilometer-output')
+ceilometer = Ceilometer(
+    device_id='IA',
+    input_dir='ceilometer-input',
+    archive=archive,
+    raw2l1_config_file='example_configs/raw2l1_cl61.conf',
+    stratfinder_config_file='example_configs/stratfinder_settings_cl61.json',
+    stratfinder_qc_value_config_file='example_configs/values_qc.toml',
+    stratfinder_qc_metadata_file='example_configs/STRATFINDER_metadata.toml',
+    calibration_profile_beta=profiles['beta_att'],
+    # omit those if your ceilometer does not support that
+    calibration_profile_p_pol=profiles['p_pol'],
+    calibration_profile_x_pol=profiles['x_pol'],
+)
+```
+
+If you do not have one yet, you can easily create one using the ceilometer instance.
+After creation they are automatically assigned to the class. And applied.
+
+```python
+profiles = ceilometer.derive_median_dark_measurement_profile(
+   # start of the period where the termination hood was put up
+   periods=datetime(2026, 5, 28, 8, 39, 0),
+   # discard the first time period and let the instrument settle
+   discard_window=timedelta(minutes=20),
+   # use the subsequent time period for deriving the median profile
+   calibration_window=timedelta(minutes=30),
+)
+# create a plot from the derived background noise
+ceilometer.median_over_range_plot(
+   profiles=profiles,
+   output_path='median_over_range_plot.png',
+)
+# save the profile to disk for later use
+profiles.to_netcdf('median_dark_measurement_profile.nc')
+```
+
+![](img/median_dark_measurement_profile.png)
+
+If you have taken multiple hood measurements across a longer time span, you may specify
+those in the following way. Please note that you will have to **manually** take care of
+the discard window and calibration window.
+
+This is a fully manual override: `discard_window`, `calibration_window` and the
+validation of the length of the period is completely bypassed. You are on your own here!
+
+```python
+profiles = ceilometer.derive_median_dark_measurement_profile(
+   periods=[
+      (
+         datetime(2026, 5, 28, 8, 12, 0),
+         datetime(2026, 5, 28, 8, 12, 30),
+      ),
+      (
+         datetime(2026, 5, 28, 15, 15, 20),
+         datetime(2026, 5, 28, 8, 15, 50),
+      ),
+   ],
+)
+```
+
+### Removal of background noise
+
+When a calibration profile is specified in the class instance, the `.to_l1` and
+`.process_raw_files` method will subtract this profile during creation of the L1 data.
+This is applied to `rcs_1`, `rcs_2`, and `beta` while `rcs_0` and `ldr` are recomputed
+from the adjusted `rcs_1` and `rcs_2` before being saved to the L1 file.
+
 ## References
+
+Kotthaus, S., O’Connor, E., Münkel, C., Charlton-Perez, C., Haeffelin, M., Gabey, A. M.,
+& Grimmond, C. S. B. (2016). Recommendations for processing atmospheric attenuated
+backscatter profiles from Vaisala CL31 ceilometers. Atmospheric Measurement Techniques,
+9(8), 3769–3791. https://doi.org/10.5194/amt-9-3769-2016
 
 Kotthaus, S., Haeffelin, M., Drouin, M.-A., Dupont, J.-C., Grimmond, S., Haefele, A.,
 Hervo, M., Poltera, Y., & Wiegner, M. (2020). Tailored Algorithms for the Detection of
 the Atmospheric Boundary Layer Height from Common Automatic Lidars and Ceilometers
 (ALC). Remote Sensing, 12(19), 3259. https://doi.org/10.3390/rs12193259
+
+Looschelders, D., Christen, A., Grimmond, S., Kotthaus, S., Fenner, D., Dupont, J.,
+Haeffelin, M., & Morrison, W. (2025). Inter‐Instrument Variability of Vaisala CL61
+Lidar‐Ceilometer’s Attenuated Backscatter, Cloud Properties and Mixed‐Layer Height.
+Meteorological Applications, 32(5), e70088. https://doi.org/10.1002/met.70088
