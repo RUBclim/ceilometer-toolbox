@@ -12,7 +12,7 @@ dependencies = [
     "pandas",
     "solpos",
     "dask",
-    "raw2l1@git+https://github.com/RUBclim/raw2l1",
+    "raw2l1",
     "qc-sf-python@git+https://github.com/RUBclim/qc-sf-python"
 ]
 requires-python = ">=3.11"
