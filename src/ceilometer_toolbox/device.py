@@ -1284,6 +1284,7 @@ class Ceilometer:
         if alt_max is not None:
             ax.set_ylim(0, alt_max)
 
+        ax.set_title(None)
         ax.grid()
         fig.autofmt_xdate()
         ax.set_xlim(start_date, end_date)
