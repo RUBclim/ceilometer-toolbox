@@ -220,18 +220,12 @@ class Ceilometer:
         # build the correct command line arguments for raw2l1
         input_files = (
             [input_files]
-            if isinstance(
-                input_files,
-                str,
-            )
+            if isinstance(input_files, str)
             else input_files
         )
         ancillary_files = (
             [ancillary_files]
-            if isinstance(
-                ancillary_files,
-                str,
-            )
+            if isinstance(ancillary_files, str)
             else ancillary_files
         )
         # add prefix argument and flatten
@@ -285,6 +279,15 @@ class Ceilometer:
                 with xr.open_dataset(tmp_file) as ds:
                     ds = ds.load()
 
+                original_encoding = {
+                    name: var.encoding.copy()
+                    for name, var in ds.variables.items()
+                }
+                packable_keys = (
+                    'zlib', 'complevel', 'shuffle', 'chunksizes', 'dtype', '_FillValue',
+                    'missing_value',
+                )
+
                 # Mapping from raw-file variable name (which is what the
                 # calibration profile was derived against) to its corresponding
                 # L1 variable name written by raw2l1.
@@ -297,16 +300,36 @@ class Ceilometer:
                 for l1_var, profile in calibrations:
                     if profile is None or l1_var not in ds:
                         continue
+
                     # NaN / inf in the profile mean "no information for this
                     # gate" - treat as a zero correction.
-                    correction = profile.where(np.isfinite(profile), 0)
-                    ds[l1_var] = ds[l1_var] - correction
+                    # the eprofile.ini has some values marked as $double$ (64 bit),
+                    # however, the CL61 only reports in 32bit, hence 32bit values
+                    # are saved in 64 bit variables. In the original file this is not
+                    # a problem, but when we subtract the profile from it, the result
+                    # seems to make use of the higher 64 bit precision and doubles the
+                    # size of the column
+                    correction = profile.where(np.isfinite(profile), 0).astype('f4')
+                    # this makes it preserve the attributes, keep_attrs=True does not
+                    # work here.
+                    ds.update(
+                        other={l1_var: (ds[l1_var] - correction.values).astype('f4')},
+                    )
                     rcs_calibrated.add(l1_var)
 
                 if rcs_calibrated & {'rcs_1', 'rcs_2'} and {'rcs_1', 'rcs_2'} <= set(ds):  # noqa: E501
-                    ds['ldr'] = ds['rcs_2'] / ds['rcs_1']
-                    ds['rcs_0'] = ds['rcs_1'] + ds['rcs_2']
+                    ds['linear_depol_ratio'].values = ds['rcs_2'].values / ds['rcs_1'].values  # noqa: E501
+                    ds['rcs_0'].values = ds['rcs_1'].values + ds['rcs_2'].values
                 # write the calibrated dataset back to the original output file
+                # we need to use the same settings as in raw2l1 to match it closely
+                for v in ('beta', 'rcs_1', 'rcs_2', 'ldr', 'rcs_0'):
+                    if v in ds and v in original_encoding:
+                        v_enc = {
+                            k: original_encoding[v][k]
+                            for k in packable_keys if k in original_encoding[v]
+                        }
+                        ds[v].encoding = v_enc
+
                 ds.to_netcdf(tmp_file, mode='w')
                 # now let the atomic write happen
             return ret

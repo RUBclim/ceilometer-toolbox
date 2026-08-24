@@ -6,6 +6,7 @@ from datetime import datetime
 from datetime import timedelta
 from unittest import mock
 
+import numpy as np
 import pytest
 import xarray as xr
 from ceilometer_toolbox.data import CeilometerArchive
@@ -235,6 +236,17 @@ def test_to_l1_with_calibration_profiles(dirs, ceilometer):
         )
 
     assert ret == 0
+    # make sure the datatypes are correct for the modified columns
+    with xr.open_dataset(output_file) as ds:
+        assert ds['beta'].dtype == np.float32
+        assert ds['beta'].encoding['missing_value'] == np.float32(-999.9)
+        assert ds['rcs_0'].dtype == np.float64  # as defined in eprofile.ini
+        assert ds['rcs_0'].encoding['missing_value'] == np.float64(-999.9)
+        assert ds['rcs_1'].dtype == np.float64  # as defined in eprofile.ini
+        assert ds['rcs_1'].encoding['missing_value'] == np.float64(-999.9)
+        assert ds['rcs_2'].dtype == np.float64  # as defined in eprofile.ini
+        assert ds['rcs_2'].encoding['missing_value'] == np.float64(-999.9)
+
     # TODO: test how values are actually applied and that calculations are correct!
     assert os.path.exists(output_file)
 
