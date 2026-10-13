@@ -1315,3 +1315,22 @@ def test_derive_median_dark_measurement_profile_no_polarization(dirs, archive):
 def test_parse_file_date_from_name(ceilometer):
     with pytest.raises(ValueError, match='Could not parse date from file name'):
         ceilometer._parse_file_date_from_name('invalid_filename.nc', prefix='')
+
+
+def test_device_repr():
+    archive = CeilometerArchive(root_dir='/tmp')
+    ceilometer = Ceilometer(
+        device_id='IA',
+        input_dir='/input',
+        archive=archive,
+        stratfinder_config_file='config.json',
+    )
+    repr_str = repr(ceilometer)
+    assert repr_str == (
+        "Ceilometer(device_id='IA', input_dir='/input', "
+        "archive=CeilometerArchive(root_dir='/tmp'), "
+        "raw2l1_config_file=None, stratfinder_config_file='config.json', "
+        'stratfinder_qc_value_config_file=None, stratfinder_qc_metadata_file=None, '
+        'calibration_profile_beta=None, calibration_profile_x_pol=None, '
+        'calibration_profile_p_pol=None)'
+    )

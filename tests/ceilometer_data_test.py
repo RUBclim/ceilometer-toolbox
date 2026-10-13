@@ -617,3 +617,8 @@ def test_open_dataset_beta_uses_preprocess_with_tolerance(tmp_path):
         combine='nested',
     )
     assert seen['altitude'] == [10.0, 20.0, 30.0]
+
+
+def test_archive_repr():
+    archive = CeilometerArchive('tmp-output')
+    assert repr(archive) == "CeilometerArchive(root_dir='tmp-output')"

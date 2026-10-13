@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 import subprocess
@@ -40,6 +42,7 @@ class Ceilometer:
     def __init__(
             self,
             device_id: str,
+            *,
             input_dir: str,
             archive: CeilometerArchive,
             raw2l1_config_file: str | None = None,
@@ -89,6 +92,38 @@ class Ceilometer:
         self.calibration_profile_beta = calibration_profile_beta
         self.calibration_profile_x_pol = calibration_profile_x_pol
         self.calibration_profile_p_pol = calibration_profile_p_pol
+
+    @classmethod
+    def from_archive(
+            cls,
+            archive: CeilometerArchive,
+            device_id: str,
+            input_dir: str | None = None,
+    ) -> Ceilometer:
+        """Create a Ceilometer instance from a CeilometerArchive instance.
+
+        This classmethod is for convenience when only data access is required and no
+        file processing is intended. This can be useful for analysis or plotting.
+
+        :param archive: The CeilometerArchive instance to use for reading and writing
+            files. This should be initialized with the same device_id as the one
+            provided to this class.
+        :param device_id: The ID of the ceilometer device to process. This should
+            match the device_id used in the CeilometerArchive for storing the files.
+        :param input_dir: The directory where the raw ceilometer files are stored. This
+            should be a directory that contains the raw files with the naming
+            convention live_YYYYMMDD_HHMMSS.nc, where YYYYMMDD is the date of the file
+            and HHMMSS is the time of the file. The files should be organized in a way
+            that allows globbing for a specific date. If None, the current working
+            directory will be used.
+        :return: A Ceilometer instance initialized with the provided archive
+            and device_id.
+        """
+        return cls(
+            device_id=device_id,
+            input_dir=input_dir or '.',
+            archive=archive,
+        )
 
     def glob_day_raw_data(self, file_date: date, prefix: str) -> list[str]:
         """Glob the raw ceilometer files for a given date and prefix.
@@ -336,6 +371,7 @@ class Ceilometer:
 
     def process_raw_files(
             self,
+            *,
             start_date: date | str | None = None,
             end_date: date | str | None = None,
             prefix: str = 'live_',
@@ -501,6 +537,7 @@ class Ceilometer:
 
     @staticmethod
     def stratfinder_in_docker(
+            *,
             today_file: str,
             output_file: str,
             beta_file: str,
@@ -585,6 +622,7 @@ class Ceilometer:
 
     @staticmethod
     def stratfinder_local(
+            *,
             executable_path: str,
             today_file: str,
             output_file: str,
@@ -620,11 +658,12 @@ class Ceilometer:
             yesterday_file or repr(''),
             repr(''),
         )
-        result = subprocess.run(cmd, stdout=None, stderr=None)
+        result = subprocess.run(cmd, stdout=None, stderr=None, check=True)
         return result.returncode
 
     def process_l1_files(
             self,
+            *,
             start_date: date | str | None = None,
             end_date: date | str | None = None,
             config_file: str | None = None,
@@ -747,6 +786,7 @@ class Ceilometer:
 
     def process_stratfinder_qc(
             self,
+            *,
             start_date: date | str | None = None,
             end_date: date | str | None = None,
             config_file: str | None = None,
@@ -866,6 +906,7 @@ class Ceilometer:
     def derive_median_dark_measurement_profile(
             self,
             periods: list[tuple[datetime, datetime]] | datetime,
+            *,
             prefix: str = 'live_',
             discard_window: timedelta = timedelta(minutes=20),
             calibration_window: timedelta = timedelta(minutes=30),
@@ -979,15 +1020,9 @@ class Ceilometer:
             range=median_profiles['range'].astype('float32'),
         )
 
-        self.calibration_profile_beta = (
-            median_profiles['beta_att'] if 'beta_att' in median_profiles else None
-        )
-        self.calibration_profile_x_pol = (
-            median_profiles['x_pol'] if 'x_pol' in median_profiles else None
-        )
-        self.calibration_profile_p_pol = (
-            median_profiles['p_pol'] if 'p_pol' in median_profiles else None
-        )
+        self.calibration_profile_beta = median_profiles.get('beta_att', None)
+        self.calibration_profile_x_pol = median_profiles.get('x_pol', None)
+        self.calibration_profile_p_pol = median_profiles.get('p_pol', None)
         return median_profiles
 
     def median_over_range_plot(
@@ -1081,6 +1116,7 @@ class Ceilometer:
 
     def beta_plot(
             self,
+            *,
             start_date: datetime,
             end_date: datetime,
             output_path: str,
@@ -1238,6 +1274,7 @@ class Ceilometer:
 
     def ldr_plot(
             self,
+            *,
             start_date: datetime,
             end_date: datetime,
             output_path: str,
@@ -1313,3 +1350,16 @@ class Ceilometer:
         ax.set_xlim(start_date, end_date)
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         return fig
+
+    def __repr__(self) -> str:
+        return (
+            f"Ceilometer(device_id={self.device_id!r}, input_dir={self.input_dir!r}, "
+            f"archive={self.archive!r}, "
+            f"raw2l1_config_file={self.raw2l1_config_file!r}, "
+            f"stratfinder_config_file={self.stratfinder_config_file!r}, "
+            f"stratfinder_qc_value_config_file={self.stratfinder_qc_value_config_file!r}, "  # noqa: E501
+            f"stratfinder_qc_metadata_file={self.stratfinder_qc_metadata_file!r}, "
+            f"calibration_profile_beta={self.calibration_profile_beta!r}, "
+            f"calibration_profile_x_pol={self.calibration_profile_x_pol!r}, "
+            f"calibration_profile_p_pol={self.calibration_profile_p_pol!r})"
+        )

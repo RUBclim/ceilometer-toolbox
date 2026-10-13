@@ -206,6 +206,24 @@ with archive.atomic_put_file(
 
 Files may also be deleted using the `delete` method.
 
+### Easy CeilometerArchive creation
+
+If only deriving data or plotting, no raw data processing, you can derive the
+`Ceilometer` instance from the `CeilometerArchive`:
+
+```python
+from ceilometer_toolbox import CeilometerArchive
+from ceilometer_toolbox import Ceilometer
+
+
+archive = CeilometerArchive(root_dir='tmp-output')
+ceilometer = Ceilometer.from_archive(
+    archive=archive,
+    device_id='IA',
+)
+ceilometer.beta_plot(...)
+```
+
 ## Plotting data
 
 The toolbox also comes with simple plotting functions for plotting $\beta$ and the
@@ -320,6 +338,9 @@ profiles = ceilometer.derive_median_dark_measurement_profile(
    ],
 )
 ```
+
+If only plotting, see:
+[Easy CeilometerArchive creation](#easy-ceilometerarchive-creation).
 
 ### Removal of background noise
 

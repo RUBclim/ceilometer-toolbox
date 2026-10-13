@@ -562,3 +562,6 @@ class CeilometerArchive:
             yield ds
         finally:
             ds.close()
+
+    def __repr__(self) -> str:
+        return f'CeilometerArchive(root_dir={self.root_dir!r})'
