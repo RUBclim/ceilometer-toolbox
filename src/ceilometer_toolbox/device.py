@@ -20,6 +20,7 @@ import numpy as np
 import xarray as xr
 from ceilometer_toolbox.data import atomic_write_path
 from ceilometer_toolbox.data import CeilometerArchive
+from ceilometer_toolbox.data import FILE_TYPES
 from ceilometer_toolbox.utils import add_solar_times
 from ceilometer_toolbox.utils import LDR_CMAP
 from ceilometer_toolbox.utils import resample_dataset
@@ -1119,7 +1120,7 @@ class Ceilometer:
             *,
             start_date: datetime,
             end_date: datetime,
-            output_path: str,
+            output_path: str | None = None,
             alt_max: int | None = None,
             show_mlh: bool = False,
             show_ablh: bool = False,
@@ -1202,9 +1203,14 @@ class Ceilometer:
             add_solar_times(ax, ds, lat=lat, lon=lon)
 
         if any([show_mlh, show_ablh, show_cbh]):
+            if filter_qc is True:
+                file_type = 'L2B_stratfinder'
+            else:
+                file_type = 'L2A_stratfinder'
+            assert file_type in FILE_TYPES
             with self.archive.open_dataset(
                 device_id=self.device_id,
-                file_type='L2B_stratfinder',
+                file_type=file_type,
                 start_date=start_date,
                 end_date=end_date,
                 engine='netcdf4',
@@ -1269,7 +1275,8 @@ class Ceilometer:
         ax.grid()
         fig.autofmt_xdate()
         ax.set_xlim(start_date, end_date)
-        plt.savefig(output_path, dpi=200, bbox_inches='tight')
+        if output_path is not None:
+            plt.savefig(output_path, dpi=200, bbox_inches='tight')
         return fig
 
     def ldr_plot(
@@ -1277,7 +1284,7 @@ class Ceilometer:
             *,
             start_date: datetime,
             end_date: datetime,
-            output_path: str,
+            output_path: str | None = None,
             alt_max: int | None = None,
             resampler: Callable[
                 [xr.Dataset, timedelta],
@@ -1348,7 +1355,8 @@ class Ceilometer:
         ax.grid()
         fig.autofmt_xdate()
         ax.set_xlim(start_date, end_date)
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        if output_path is not None:
+            plt.savefig(output_path, dpi=150, bbox_inches='tight')
         return fig
 
     def __repr__(self) -> str:

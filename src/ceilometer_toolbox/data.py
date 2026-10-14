@@ -19,6 +19,9 @@ import xarray as xr
 # L2A_stratfinder: stratfinder output
 # L2B_stratfinder: stratfinder output after qc application
 FileType = Literal['L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder']
+FILE_TYPES: frozenset[FileType] = frozenset(
+    ('L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder'),
+)
 
 
 class ArchiveFile(NamedTuple):
@@ -300,12 +303,35 @@ class CeilometerArchive:
         if max_depth_days < 0:
             raise ValueError('max_depth_days must be >= 0')
 
-        anchor = date.today() if from_date is None else self._parse_date(from_date)  # noqa: E501
+        anchor = date.today() if from_date is None else self._parse_date(from_date)
         for offset in range(max_depth_days + 1):
             candidate = date.fromordinal(anchor.toordinal() - offset)
-            if os.path.isfile(self._file_path(device_id, file_type, candidate)):  # noqa: E501
+            if os.path.isfile(self._file_path(device_id, file_type, candidate)):
                 return candidate
         return None
+
+    def earliest_date(
+            self,
+            device_id: str,
+            file_type: FileType,
+            from_date: str | date | datetime | None = None,
+            max_depth_days: int = 3660,
+    ) -> date | None:
+        self._validate_file_type(file_type)
+        if max_depth_days < 0:
+            raise ValueError('max_depth_days must be >= 0')
+
+        anchor = date.today() if from_date is None else self._parse_date(from_date)
+        earliest: date | None = None
+
+        for offset in range(max_depth_days + 1):
+            candidate = date.fromordinal(anchor.toordinal() - offset)
+            if os.path.isfile(self._file_path(device_id, file_type, candidate)):
+                earliest = candidate
+            else:
+                continue
+
+        return earliest
 
     def put_file(
             self,
