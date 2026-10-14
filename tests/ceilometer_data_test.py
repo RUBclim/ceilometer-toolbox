@@ -41,7 +41,7 @@ def test_parse_date_rejects_invalid_value(tmp_path):
 def test_parse_date_rejects_unsupported_type(tmp_path):
     archive = CeilometerArchive(tmp_path)
     with pytest.raises(ValueError, match='Date values must be'):
-        archive._parse_date(123)  # type: ignore[arg-type]
+        archive._parse_date(123)
 
 
 def test_iter_days_is_inclusive(tmp_path):
@@ -174,7 +174,7 @@ def test_file_path_builds_and_rejects_invalid_type(tmp_path):
     assert out.endswith('/IA/2026/04/20260401_L2A_stratfinder.nc')
 
     with pytest.raises(ValueError, match='Unsupported file type'):
-        archive._file_path('IA', 'bad', '2026-04-01')  # type: ignore[arg-type]
+        archive._file_path('IA', 'bad', '2026-04-01')
 
 
 def test_list_files_inclusive_date_range(tmp_path):
@@ -226,7 +226,7 @@ def test_iter_files_invalid_file_type(tmp_path):
         list(
             archive.iter_files(
                 'IA',
-                'foo',  # type: ignore[arg-type]
+                'foo',
                 '2026-03-01',
                 '2026-03-02',
             ),
@@ -418,7 +418,7 @@ def test_put_file_rejects_invalid_type(tmp_path):
     archive = CeilometerArchive(tmp_path)
 
     with pytest.raises(ValueError, match='Unsupported file type'):
-        archive.put_file('IA', 'foo', '2026-03-22')  # type: ignore[arg-type]
+        archive.put_file('IA', 'foo', '2026-03-22')
 
 
 def test_atomic_write_path_publishes_file_on_success(tmp_path):
@@ -620,5 +620,5 @@ def test_open_dataset_beta_uses_preprocess_with_tolerance(tmp_path):
 
 
 def test_archive_repr():
-    archive = CeilometerArchive('tmp-output')
-    assert repr(archive) == "CeilometerArchive(root_dir='tmp-output')"
+    archive = CeilometerArchive('/tmp')
+    assert repr(archive) == "CeilometerArchive(root_dir='/tmp')"
