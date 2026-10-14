@@ -1334,3 +1334,21 @@ def test_device_repr():
         'calibration_profile_beta=None, calibration_profile_x_pol=None, '
         'calibration_profile_p_pol=None)'
     )
+
+
+def test_from_archive():
+    archive = CeilometerArchive(root_dir='/tmp')
+    ceilometer = Ceilometer.from_archive(archive=archive, device_id='IA')
+    assert ceilometer.device_id == 'IA'
+    assert ceilometer.input_dir == '.'
+    assert ceilometer.archive is archive
+
+
+def test_from_archive_with_input_dir():
+    archive = CeilometerArchive(root_dir='/tmp')
+    ceilometer = Ceilometer.from_archive(
+        archive=archive,
+        device_id='IA',
+        input_dir='/input',
+    )
+    assert ceilometer.input_dir == '/input'

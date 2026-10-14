@@ -41,7 +41,7 @@ def test_parse_date_rejects_invalid_value(tmp_path):
 def test_parse_date_rejects_unsupported_type(tmp_path):
     archive = CeilometerArchive(tmp_path)
     with pytest.raises(ValueError, match='Date values must be'):
-        archive._parse_date(123)
+        archive._parse_date(123)  # type: ignore[arg-type]
 
 
 def test_iter_days_is_inclusive(tmp_path):
@@ -174,7 +174,7 @@ def test_file_path_builds_and_rejects_invalid_type(tmp_path):
     assert out.endswith('/IA/2026/04/20260401_L2A_stratfinder.nc')
 
     with pytest.raises(ValueError, match='Unsupported file type'):
-        archive._file_path('IA', 'bad', '2026-04-01')
+        archive._file_path('IA', 'bad', '2026-04-01')  # type: ignore[arg-type]
 
 
 def test_list_files_inclusive_date_range(tmp_path):
@@ -226,7 +226,7 @@ def test_iter_files_invalid_file_type(tmp_path):
         list(
             archive.iter_files(
                 'IA',
-                'foo',
+                'foo',  # type: ignore[arg-type]
                 '2026-03-01',
                 '2026-03-02',
             ),
@@ -343,6 +343,59 @@ def test_latest_date_zero_max_depth_days_only_checks_anchor(tmp_path):
     ) is None
 
 
+def test_earliest_date_for_device_and_type(tmp_path):
+    paths = [
+        'IA/2026/02/20260227_L1.nc',
+        'IA/2026/03/20260305_L1.nc',
+        'IA/2026/03/20260304_L2A_beta.nc',
+    ]
+    for path in paths:
+        _touch(os.path.join(tmp_path, path))
+
+    archive = CeilometerArchive(tmp_path)
+
+    assert archive.earliest_date(
+        'IA', 'L1', from_date='2026-03-10',
+    ) == date(2026, 2, 27)
+    assert archive.earliest_date(
+        'IA', 'L2A_beta', from_date='2026-03-10',
+    ) == date(2026, 3, 4)
+    assert archive.earliest_date('IB', 'L1', from_date='2026-03-10') is None
+
+
+def test_earliest_date_uses_max_depth_days(tmp_path):
+    for path in ['IA/2026/03/20260301_L1.nc', 'IA/2026/03/20260305_L1.nc']:
+        _touch(os.path.join(tmp_path, path))
+
+    archive = CeilometerArchive(tmp_path)
+
+    assert archive.earliest_date(
+        'IA', 'L1', from_date='2026-03-10', max_depth_days=8,
+    ) == date(2026, 3, 5)
+    assert archive.earliest_date(
+        'IA', 'L1', from_date='2026-03-10', max_depth_days=9,
+    ) == date(2026, 3, 1)
+
+
+def test_earliest_date_defaults_to_today(tmp_path):
+    today = date.today()
+    _touch(
+        os.path.join(
+            tmp_path, 'IA', f'{today:%Y}', f'{today:%m}', f'{today:%Y%m%d}_L1.nc',
+        ),
+    )
+    archive = CeilometerArchive(tmp_path)
+
+    assert archive.earliest_date('IA', 'L1', max_depth_days=0) == today
+
+
+def test_earliest_date_rejects_negative_max_depth_days(tmp_path):
+    archive = CeilometerArchive(tmp_path)
+
+    with pytest.raises(ValueError, match='max_depth_days must be >= 0'):
+        archive.earliest_date('IA', 'L1', max_depth_days=-1)
+
+
 def test_write_file_creates_tree(tmp_path):
     archive = CeilometerArchive(tmp_path)
 
@@ -418,7 +471,7 @@ def test_put_file_rejects_invalid_type(tmp_path):
     archive = CeilometerArchive(tmp_path)
 
     with pytest.raises(ValueError, match='Unsupported file type'):
-        archive.put_file('IA', 'foo', '2026-03-22')
+        archive.put_file('IA', 'foo', '2026-03-22')  # type: ignore[arg-type]
 
 
 def test_atomic_write_path_publishes_file_on_success(tmp_path):

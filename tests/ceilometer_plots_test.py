@@ -5,11 +5,13 @@ from datetime import timedelta
 from functools import partial
 from unittest import mock
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
 from ceilometer_toolbox.data import CeilometerArchive
 from ceilometer_toolbox.device import Ceilometer
+from matplotlib.figure import Figure
 from matplotlib.testing.decorators import image_comparison
 
 
@@ -350,3 +352,45 @@ def test_median_over_range_plot_only_beta(tmp_path, ceilometer):
 @contextmanager
 def _fake_ctx(ds):
     yield ds
+
+
+# ---------------------------------------------------------------------------
+# plots are not saved when no output_path is given
+# ---------------------------------------------------------------------------
+
+
+def test_median_over_range_plot_without_output_path(ceilometer):
+    with (
+        xr.open_dataset('testing/dark_profile_baseline.nc') as profiles,
+        mock.patch('ceilometer_toolbox.device.plt.savefig') as savefig,
+    ):
+        fig = ceilometer.median_over_range_plot(profiles=profiles)
+
+    assert isinstance(fig, Figure)
+    savefig.assert_not_called()
+    plt.close(fig)
+
+
+def test_beta_plot_without_output_path(ceilometer):
+    with mock.patch('ceilometer_toolbox.device.plt.savefig') as savefig:
+        fig = ceilometer.beta_plot(
+            start_date=datetime(2026, 3, 25, 23, 0),
+            end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
+            beta_file_type='L1',
+        )
+
+    assert isinstance(fig, Figure)
+    savefig.assert_not_called()
+    plt.close(fig)
+
+
+def test_ldr_plot_without_output_path(ceilometer):
+    with mock.patch('ceilometer_toolbox.device.plt.savefig') as savefig:
+        fig = ceilometer.ldr_plot(
+            start_date=datetime(2026, 3, 25, 23, 0),
+            end_date=datetime(2026, 3, 25, 23, 0) + timedelta(days=1),
+        )
+
+    assert isinstance(fig, Figure)
+    savefig.assert_not_called()
+    plt.close(fig)
