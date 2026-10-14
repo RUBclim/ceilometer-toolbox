@@ -1028,7 +1028,7 @@ class Ceilometer:
 
     def median_over_range_plot(
             self,
-            output_path: str,
+            output_path: str | None = None,
             profiles: xr.Dataset | None = None,
             alt_max: int | None = None,
             **kwargs: dict[str, Any],
@@ -1112,7 +1112,8 @@ class Ceilometer:
 
         axs[0].set_ylabel('Range (m)')
         plt.tight_layout()
-        plt.savefig(output_path, dpi=200, bbox_inches='tight')
+        if output_path is not None:
+            plt.savefig(output_path, dpi=200, bbox_inches='tight')
         return fig
 
     def beta_plot(
