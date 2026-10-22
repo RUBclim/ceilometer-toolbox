@@ -39,6 +39,7 @@ def _file_date_pattern(prefix: str) -> re.Pattern[str]:
 
 class Ceilometer:
     """Class for processing ceilometer data and making plots."""
+    STRATFINDER_CONTAINER_IMAGE = 'ghcr.io/rubclim/stratfinder:latest'
 
     def __init__(
             self,
@@ -545,7 +546,7 @@ class Ceilometer:
             config_file: str,
             yesterday_file: str | None = None,
             overlap_file: str | None = None,
-            container_image: str = 'ghcr.io/rubclim/stratfinder:latest',
+            container_image: str = STRATFINDER_CONTAINER_IMAGE,
             directory_mount: str | None = None,
     ) -> int:
         """Run the stratfinder algorithm in a Docker container. This cannot be run in
@@ -672,6 +673,7 @@ class Ceilometer:
             in_docker: bool = True,
             executable_path: str | None = None,
             overlap_file: str | None = None,
+            container_image: str = STRATFINDER_CONTAINER_IMAGE,
     ) -> int:
         """Process the L1 files for the given date and all subsequent dates
         until end_date using the stratfinder algorithm.
@@ -760,6 +762,7 @@ class Ceilometer:
                         yesterday_file=yesterday_file,
                         overlap_file=overlap_file,
                         directory_mount=directory_mount,
+                        container_image=container_image,
                     )
                 else:
                     if not executable_path:
