@@ -756,7 +756,7 @@ class Ceilometer:
                     kwargs = {}
 
                     if container_image is not None:
-                        kwargs["container_image"] = container_image
+                        kwargs['container_image'] = container_image
 
                     ret = self.stratfinder_in_docker(
                         config_file=config_file,
