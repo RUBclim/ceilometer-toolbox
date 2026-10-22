@@ -672,6 +672,7 @@ class Ceilometer:
             in_docker: bool = True,
             executable_path: str | None = None,
             overlap_file: str | None = None,
+            container_image: str | None = None,
     ) -> int:
         """Process the L1 files for the given date and all subsequent dates
         until end_date using the stratfinder algorithm.
@@ -752,6 +753,11 @@ class Ceilometer:
                 ) as beta_file,
             ):
                 if in_docker:
+                    kwargs = {}
+
+                    if container_image is not None:
+                        kwargs['container_image'] = container_image
+
                     ret = self.stratfinder_in_docker(
                         config_file=config_file,
                         today_file=today_file,
@@ -760,6 +766,7 @@ class Ceilometer:
                         yesterday_file=yesterday_file,
                         overlap_file=overlap_file,
                         directory_mount=directory_mount,
+                        **kwargs,
                     )
                 else:
                     if not executable_path:
