@@ -11,6 +11,7 @@ from datetime import timedelta
 from functools import lru_cache
 from glob import glob
 from multiprocessing import Pool
+from pathlib import Path
 from typing import Any
 from typing import Literal
 
@@ -595,6 +596,7 @@ class Ceilometer:
         yesterday_file = _to_container_path(yesterday_file) if yesterday_file else None
         overlap_file = _to_container_path(overlap_file) if overlap_file else None
         dyn_config = _to_container_path(config_file)
+        container_workdir = str(Path(dyn_config).parent)
 
         cmd = (
             'docker',
@@ -606,7 +608,7 @@ class Ceilometer:
             f"{os.getuid()}:{os.getgid()}",
             '--rm',
             '--workdir',
-            '/data',
+            container_workdir,
             '-v',
             f"{local_dir}:/data",
             container_image,

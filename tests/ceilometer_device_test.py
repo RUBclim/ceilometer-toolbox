@@ -521,6 +521,38 @@ def test_stratfinder_in_docker_builds_command_with_all_optional_args(
     assert 'myimage:v1' in cmd
 
 
+def test_stratfinder_in_docker_uses_config_directory_as_workdir(
+        tmp_path,
+        monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+
+    config_dir = tmp_path / 'some' / 'subdir'
+    config_dir.mkdir(parents=True)
+
+    result = mock.MagicMock()
+    result.returncode = 0
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+        return_value=result,
+    ) as run:
+        ret = Ceilometer.stratfinder_in_docker(
+            today_file='today.nc',
+            output_file='out.nc',
+            beta_file='beta.nc',
+            config_file=str(config_dir / 'config.json'),
+            directory_mount=str(tmp_path),
+        )
+
+    assert ret == 0
+
+    cmd = run.call_args[0][0]
+    workdir_index = cmd.index('--workdir')
+
+    assert cmd[workdir_index + 1] == '/data/some/subdir'
+
+
 def test_stratfinder_in_docker_builds_command_without_optional_args(
         tmp_path,
         monkeypatch,
@@ -543,6 +575,10 @@ def test_stratfinder_in_docker_builds_command_without_optional_args(
 
     assert ret == 42
     cmd = run.call_args[0][0]
+
+    workdir_index = cmd.index('--workdir')
+    assert cmd[workdir_index + 1] == '/data'
+
     assert repr('') in cmd
 
 
