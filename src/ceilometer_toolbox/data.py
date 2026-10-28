@@ -18,9 +18,12 @@ import xarray as xr
 # L2A_beta: stratfinder beta output
 # L2A_stratfinder: stratfinder output
 # L2B_stratfinder: stratfinder output after qc application
-FileType = Literal['L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder']
+# CALIBRATION: Rayleigh lidar constant per night (one row per day, see rayleigh.py)
+FileType = Literal[
+    'L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder', 'CALIBRATION',
+]
 FILE_TYPES: frozenset[FileType] = frozenset(
-    ('L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder'),
+    ('L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder', 'CALIBRATION'),
 )
 
 
@@ -78,7 +81,7 @@ class CeilometerArchive:
 
     VALID_FILE_TYPES: frozenset[FileType] = frozenset(
         # TODO: research how IPSL does that
-        ('L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder'),
+        ('L1', 'L2A_beta', 'L2A_stratfinder', 'L2B_stratfinder', 'CALIBRATION'),
     )
     _FILE_PATTERN = re.compile(
         fr'^(\d{{8}})_({"|".join(VALID_FILE_TYPES)})\.nc$',

@@ -23,6 +23,12 @@ def main() -> int:
     ceilometer.process_raw_files(
         start_date='2026-04-27', end_date='2026-04-27', jobs=4,
     )
+    x = ceilometer.process_rayleigh_calibration(
+        options_file='options.json',
+        start_date='2026-04-27',
+        end_date='2026-04-28',
+    )
+    print(x)
     ceilometer.process_l1_files(start_date='2026-04-27', end_date='2026-04-28')
     ceilometer.process_stratfinder_qc(
         start_date='2026-04-27', end_date='2026-04-28',

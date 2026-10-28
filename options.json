@@ -1,0 +1,7 @@
+{
+    "data_level": "L1",
+    "apply_wv_correction": 1,
+    "auto_download_cams": 1,
+    "cams_download_scope": "day",
+    "cams_folder": ".CAMS"
+}

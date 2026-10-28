@@ -11,6 +11,7 @@ from datetime import timedelta
 from functools import lru_cache
 from glob import glob
 from multiprocessing import Pool
+from pathlib import Path
 from typing import Any
 from typing import Literal
 
@@ -18,9 +19,15 @@ import matplotlib.patheffects as mpe
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+from calibration import CalibrationOptions
+from calibration import InstrumentInfo
+from calibration import InstrumentType
+from calibration.io.output import version_code
 from ceilometer_toolbox.data import atomic_write_path
 from ceilometer_toolbox.data import CeilometerArchive
 from ceilometer_toolbox.data import FILE_TYPES
+from ceilometer_toolbox.rayleigh import calibrate_night
+from ceilometer_toolbox.rayleigh import write_calibration_file
 from ceilometer_toolbox.utils import add_solar_times
 from ceilometer_toolbox.utils import LDR_CMAP
 from ceilometer_toolbox.utils import resample_dataset
@@ -124,6 +131,50 @@ class Ceilometer:
             device_id=device_id,
             input_dir=input_dir or '.',
             archive=archive,
+        )
+
+    @property
+    def raw2l1_config(self) -> dict[str, Any]:
+        """Return the path to the raw2l1 configuration file.
+
+        This is a convenience property that returns the path to the raw2l1
+        configuration file. It can be used to access the configuration file for
+        processing raw ceilometer files to level 1.
+
+        :return: The path to the raw2l1 configuration file.
+        """
+        import configparser
+        config = configparser.ConfigParser()
+        config.read(self.raw2l1_config_file)
+        d: dict[str, Any] = {}
+        for section in config.sections():
+            d[section] = {}
+            for key, val in config.items(section):
+                d[section][key] = val
+        return d
+
+    @property
+    def instrument_info(self) -> InstrumentInfo:
+        """Return the InstrumentInfo for this ceilometer device.
+
+        This is a convenience property that returns the InstrumentInfo for the
+        ceilometer device. It is derived from the device_id and can be used to
+        access instrument-specific information such as the wavelength, pulse width,
+        and other parameters.
+
+        :return: The InstrumentInfo for this ceilometer device.
+        """
+        info = self.raw2l1_config
+        return InstrumentInfo(
+            site_name=f"{info['global']['instrument_id']},{info['global']['site_location']}",
+            wmo_id=info['global']['wmo_id'],
+            identifier=self.device_id,
+            instrument_type=InstrumentType[info['global']['instrument_type']],
+            latitude=float(info['reader_conf']['lat']),
+            longitude=float(info['reader_conf']['lon']),
+            altitude=float(info['reader_conf']['alt']),
+            # TODO: not quite...
+            serial=info['global']['instrument_serial_number'],
         )
 
     def glob_day_raw_data(self, file_date: date, prefix: str) -> list[str]:
@@ -888,6 +939,72 @@ class Ceilometer:
 
             start_date += timedelta(days=1)
         return ret
+
+    def process_rayleigh_calibration(
+            self,
+            *,
+            options_file: str,
+            start_date: date | str,
+            end_date: date | str | None = None,
+    ) -> int:
+        """Derive the Rayleigh lidar constant for every day with L1 data and store
+        it as a ``CALIBRATION`` file in the archive.
+
+        The night that belongs to day ``D`` is ``D-1`` -> ``D``. Days without an L1
+        file for ``D`` are skipped. Failed nights are stored too, with their flag,
+        so the archive records attempts as well as successes. This step runs after
+        ``process_raw_files`` (L1) and does not depend on stratfinder.
+
+        :param instrument: instrument metadata (WMO id, identifier, type, site
+            coordinates) as used by the calibration package
+        :param options_file: path to the calibration package ``options.json``; CAMS
+            and molecular settings are read from it
+        :param start_date: first day to process
+        :param end_date: last day to process; defaults to today
+        :return: ``0`` when all days were processed
+        """
+        if isinstance(start_date, str):
+            start_date = date.fromisoformat(start_date)
+        if isinstance(end_date, str):
+            end_date = date.fromisoformat(end_date)
+        end = end_date if end_date is not None else date.today()
+
+        options = CalibrationOptions.from_json(options_file)
+        version = version_code(options.molecular_method)
+
+        day = start_date
+        while day <= end:
+            if self.archive.get_file_or_none(
+                    device_id=self.device_id,
+                    file_type='L1',
+                    file_date=day,
+            ) is None:
+                day += timedelta(days=1)
+                continue
+
+            night_files = self.archive.get_files(
+                device_id=self.device_id,
+                file_type='L1',
+                start_date=day - timedelta(days=1),
+                end_date=day,
+            )
+            result = calibrate_night(
+                day,
+                [Path(f) for f in night_files],
+                self.instrument_info,
+                options,
+            )
+            with self.archive.atomic_put_file(
+                    device_id=self.device_id,
+                    file_type='CALIBRATION',
+                    file_date=day,
+                    override=True,
+            ) as calibration_file:
+                write_calibration_file(
+                    calibration_file, day, result, version=version,
+                )
+            day += timedelta(days=1)
+        return 0
 
     def _validate_periods(self, periods: list[tuple[datetime, datetime]]) -> None:
         # check that start is before end

@@ -13,9 +13,10 @@ dependencies = [
     "solpos",
     "dask",
     "raw2l1",
-    "qc-sf-python@git+https://github.com/RUBclim/qc-sf-python"
+    "qc-sf-python@git+https://github.com/RUBclim/qc-sf-python",
+    "eprofile-calibration@git+https://github.com/MeteoSwiss/ALC_rayleigh_calibration",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 authors = [{ name = "Jonas Kittner", email = "jonas.kittner@rub.de" }]
 maintainers = [{ name = "Jonas Kittner", email = "jonas.kittner@rub.de" }]
 description =  "library to process data from ceilometers"
