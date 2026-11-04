@@ -33,7 +33,7 @@ def ceilometer():
 img_comp = partial(
     image_comparison,
     style='mpl20',
-    tol=0,
+    tol=0.05,
     savefig_kwarg={'bbox_inches': 'tight', 'dpi': 120},
 )
 

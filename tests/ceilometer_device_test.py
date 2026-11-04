@@ -603,6 +603,31 @@ def test_stratfinder_in_docker_uses_default_container_image(tmp_path, monkeypatc
     assert 'ghcr.io/rubclim/stratfinder:latest' in cmd
 
 
+def test_stratfinder_in_docker_uses_custom_container_image(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = mock.MagicMock()
+    result.returncode = 0
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+        return_value=result,
+    ) as run:
+        Ceilometer.stratfinder_in_docker(
+            today_file='today.nc',
+            output_file='out.nc',
+            beta_file='beta.nc',
+            config_file='config.json',
+            directory_mount=str(tmp_path),
+            container_image='registry.example.com/stratfinder:v2',
+        )
+
+    cmd = run.call_args[0][0]
+    # the image must directly follow the volume mount and replace the default
+    mount_idx = cmd.index(f'{tmp_path}:/data')
+    assert cmd[mount_idx + 1] == 'registry.example.com/stratfinder:v2'
+    assert Ceilometer.STRATFINDER_CONTAINER_IMAGE not in cmd
+
+
 def test_stratfinder_in_docker_uses_cwd_when_no_directory_mount(monkeypatch):
     monkeypatch.chdir('/')
     result = mock.MagicMock()
@@ -804,6 +829,53 @@ def test_process_l1_files_uses_directory_mount_default(dirs, archive, monkeypatc
     assert ret == 0
     cmd = run.call_args[0][0]
     assert '/:/data' in cmd
+
+
+@pytest.mark.parametrize(
+    ('kwargs', 'expected_image'),
+    (
+        pytest.param({}, 'ghcr.io/rubclim/stratfinder:latest', id='default'),
+        pytest.param(
+            {'container_image': 'registry.example.com/stratfinder:v2'},
+            'registry.example.com/stratfinder:v2',
+            id='custom',
+        ),
+    ),
+)
+def test_process_l1_files_passes_container_image(
+        dirs,
+        archive,
+        kwargs,
+        expected_image,
+):
+    cel = Ceilometer(
+        device_id='IA',
+        input_dir=dirs['input_dir'],
+        archive=archive,
+        stratfinder_config_file='config.json',
+    )
+
+    l1_path = archive.put_file('IA', 'L1', '2026-03-25')
+    _touch(l1_path)
+
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 0
+
+    with mock.patch(
+        'ceilometer_toolbox.device.subprocess.run',
+        return_value=mock_result,
+    ) as run:
+        ret = cel.process_l1_files(
+            start_date=date(2026, 3, 25),
+            end_date=date(2026, 3, 25),
+            directory_mount='/',
+            **kwargs,
+        )
+
+    assert ret == 0
+    cmd = run.call_args[0][0]
+    mount_idx = cmd.index('/:/data')
+    assert cmd[mount_idx + 1] == expected_image
 
 
 def test_process_l1_files_local_requires_executable_path(dirs, archive):
