@@ -23,3 +23,11 @@ jobs:
         python -m pip install --upgrade tox
     - name: run
       run: tox -e py
+    - name: upload image comparison results
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: result-images-py${{ matrix.python-version }}
+        path: result_images/
+        if-no-files-found: ignore
+        retention-days: 14

@@ -56,6 +56,7 @@ packages = { find = { where = ["src"], include = ["ceilometer_toolbox*"], exclud
 
 [tool.coverage.report]
 fail_under = 100
+omit = ["*/netCDF4/*"]
 
 [tool.coverage.run]
 parallel = true
