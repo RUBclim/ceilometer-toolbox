@@ -817,10 +817,18 @@ def test_process_l1_files_uses_directory_mount_default(dirs, archive, monkeypatc
     mock_result = mock.MagicMock()
     mock_result.returncode = 0
 
-    with mock.patch(
-        'ceilometer_toolbox.device.subprocess.run',
-        return_value=mock_result,
-    ) as run:
+    with (
+        mock.patch(
+            'ceilometer_toolbox.device.subprocess.run',
+            return_value=mock_result,
+        ) as run,
+        mock.patch.object(
+            Ceilometer,
+            '_get_stratfinder_container_metadata',
+            return_value={},
+        ),
+        mock.patch.object(Ceilometer, '_fix_stratfinder_metadata'),
+    ):
         ret = cel.process_l1_files(
             start_date=date(2026, 3, 25),
             end_date=date(2026, 3, 25),
@@ -861,10 +869,18 @@ def test_process_l1_files_passes_container_image(
     mock_result = mock.MagicMock()
     mock_result.returncode = 0
 
-    with mock.patch(
-        'ceilometer_toolbox.device.subprocess.run',
-        return_value=mock_result,
-    ) as run:
+    with (
+        mock.patch(
+            'ceilometer_toolbox.device.subprocess.run',
+            return_value=mock_result,
+        ) as run,
+        mock.patch.object(
+            Ceilometer,
+            '_get_stratfinder_container_metadata',
+            return_value={},
+        ),
+        mock.patch.object(Ceilometer, '_fix_stratfinder_metadata'),
+    ):
         ret = cel.process_l1_files(
             start_date=date(2026, 3, 25),
             end_date=date(2026, 3, 25),
@@ -943,9 +959,16 @@ def test_process_l1_files_raises_on_stratfinder_failure(dirs, archive):
     mock_result = mock.MagicMock()
     mock_result.returncode = 1
 
-    with mock.patch(
-        'ceilometer_toolbox.device.subprocess.run',
-        return_value=mock_result,
+    with (
+        mock.patch.object(
+            Ceilometer,
+            '_get_stratfinder_container_metadata',
+            return_value={},
+        ),
+        mock.patch(
+            'ceilometer_toolbox.device.subprocess.run',
+            return_value=mock_result,
+        ),
     ):
         with pytest.raises(RuntimeError, match='Stratfinder failed'):
             cel.process_l1_files(
@@ -955,9 +978,36 @@ def test_process_l1_files_raises_on_stratfinder_failure(dirs, archive):
             )
 
 
+def test_fix_stratfinder_metadata(tmp_path):
+    source = tmp_path / 'beta.nc'
+    target = tmp_path / 'stratfinder.nc'
+
+    history = '20261105 STRATfinder 2022a; 20261105 raw2l1 4.0.2'
+    metadata = {
+        'stratfinder_container_image': 'example/stratfinder:latest',
+        'stratfinder_source_revision': 'abcdef1',
+        'stratfinder_container_digest': 'sha256:123456',
+    }
+
+    xr.Dataset(attrs={'history': history}).to_netcdf(source)
+    xr.Dataset(attrs={'history': 'anything'}).to_netcdf(target)
+
+    Ceilometer._fix_stratfinder_metadata(
+        str(source),
+        str(target),
+        metadata,
+    )
+
+    for path in (source, target):
+        with xr.open_dataset(path) as ds:
+            assert ds.attrs['history'] == history
+            for name, value in metadata.items():
+                assert ds.attrs[name] == value
+
 # ---------------------------------------------------------------------------
 # process_stratfinder_qc
 # ---------------------------------------------------------------------------
+
 
 def test_process_stratfinder_qc_uses_latest_date_when_none(dirs, archive):
     # No L2B files, latest_date returns None, falls back to 1970-01-01
@@ -1173,10 +1223,18 @@ def test_process_l1_files_yesterday_sourced_from_own_device(dirs, archive):
     mock_result = mock.MagicMock()
     mock_result.returncode = 0
 
-    with mock.patch(
-        'ceilometer_toolbox.device.subprocess.run',
-        return_value=mock_result,
-    ) as run:
+    with (
+        mock.patch(
+            'ceilometer_toolbox.device.subprocess.run',
+            return_value=mock_result,
+        ) as run,
+        mock.patch.object(Ceilometer, '_fix_stratfinder_metadata'),
+        mock.patch.object(
+            Ceilometer,
+            '_get_stratfinder_container_metadata',
+            return_value={},
+        ),
+    ):
         ret = cel.process_l1_files(
             start_date=date(2026, 3, 25),
             end_date=date(2026, 3, 25),
