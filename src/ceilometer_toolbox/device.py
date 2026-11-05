@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import netCDF4
 import os
 import re
 import subprocess
 import tempfile
-
 from collections.abc import Callable
 from datetime import date
 from datetime import datetime
@@ -19,6 +17,7 @@ from typing import Literal
 
 import matplotlib.patheffects as mpe
 import matplotlib.pyplot as plt
+import netCDF4
 import numpy as np
 import xarray as xr
 from ceilometer_toolbox.data import atomic_write_path

@@ -977,6 +977,7 @@ def test_process_l1_files_raises_on_stratfinder_failure(dirs, archive):
                 directory_mount='/',
             )
 
+
 def test_fix_stratfinder_metadata(tmp_path):
     source = tmp_path / 'beta.nc'
     target = tmp_path / 'stratfinder.nc'
@@ -1006,6 +1007,7 @@ def test_fix_stratfinder_metadata(tmp_path):
 # ---------------------------------------------------------------------------
 # process_stratfinder_qc
 # ---------------------------------------------------------------------------
+
 
 def test_process_stratfinder_qc_uses_latest_date_when_none(dirs, archive):
     # No L2B files, latest_date returns None, falls back to 1970-01-01
