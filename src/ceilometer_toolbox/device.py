@@ -194,12 +194,10 @@ class Ceilometer:
         labels = info.get('Config', {}).get('Labels', {}) or {}
         repo_digests = info.get('RepoDigests', []) or []
 
-        metadata = {
-            'stratfinder_container_image': container_image,
-        }
+        metadata = {'stratfinder_container_image': container_image}
 
         revision = labels.get('org.opencontainers.image.version')
-        if revision:
+        if revision is not None:
             metadata['stratfinder_source_revision'] = revision
 
         if repo_digests:
