@@ -1,0 +1,74 @@
+[
+  {
+    "Id": "sha256:0626f29c1398df5ea16b6ad7755e3e227a8f165679cdf9f8e684a099bfea3fb1",
+    "RepoTags": ["ghcr.io/rubclim/stratfinder:latest"],
+    "RepoDigests": [
+      "ghcr.io/rubclim/stratfinder@sha256:1318284570ae1945d3a679da99d03ab01cd057fc42848e0d564ec072eb61b9fa"
+    ],
+    "Comment": "buildkit.dockerfile.v0",
+    "Created": "2026-05-12T10:24:49.925659265Z",
+    "Config": {
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "TZ=Etc/UTC",
+        "DEBIAN_FRONTEND=noninteractive",
+        "SHELL=/bin/sh",
+        "AGREE_TO_MATLAB_RUNTIME_LICENSE=yes",
+        "MCR_INHIBIT_CTF_LOCK=1",
+        "MCRROOT=/opt/matlabruntime/R2025b",
+        "MCR_CACHE_ROOT=/tmp/mcr_cache"
+      ],
+      "Entrypoint": ["/entrypoint.sh"],
+      "Labels": {
+        "description": "STRATfinder is an automated algorithm for detecting Mixed Layer Height (MLH) and Atmospheric Boundary Layer Height (ABLH) from lidar ceilometer backscatter data. It implements a graph-based pathfinding approach with high temporal resolution (1 minute). Support for CHM15k and CL61 instruments.",
+        "funding": "MeteoSwiss, ACTRIS, ICOS, E-PROFILE programs",
+        "maintainer": "Jonas Kittner <jonas.kittner@rub.de>",
+        "org.opencontainers.image.authors": "Jonas Kittner <jonas.kittner@rub.de>",
+        "org.opencontainers.image.base.name": "containers.mathworks.com/matlab-runtime:r2025b",
+        "org.opencontainers.image.description": "STRATfinder: Automated Mixed Layer Height (MLH) and Atmospheric Boundary Layer Height (ABLH) detection from lidar measurements",
+        "org.opencontainers.image.documentation": "https://gitlab.in2p3.fr/ipsl/sirta/mld/stratfinder/stratfinder",
+        "org.opencontainers.image.licenses": "GPL-3.0",
+        "org.opencontainers.image.ref.name": "ubuntu",
+        "org.opencontainers.image.revision": "master",
+        "org.opencontainers.image.source": "https://gitlab.in2p3.fr/ipsl/sirta/mld/stratfinder/stratfinder",
+        "org.opencontainers.image.title": "STRATfinder",
+        "org.opencontainers.image.url": "https://gitlab.in2p3.fr/ipsl/sirta/mld/stratfinder/stratfinder",
+        "org.opencontainers.image.vendor": "Institut Pierre Simon Laplace (IPSL)",
+        "org.opencontainers.image.version": "1d0c042",
+        "reference": "Kotthaus et al. (2020): STRATfinder: a convective boundary layer algorithm tracking mixed layer height and clouds",
+        "science.openapplications": "Atmospheric Science - Boundary Layer Detection",
+        "software.author": "Simone Kotthaus (Institut Pierre Simon Laplace)"
+      }
+    },
+    "Architecture": "amd64",
+    "Os": "linux",
+    "Size": 7253900930,
+    "GraphDriver": {
+      "Data": {
+        "LowerDir": "/var/lib/docker/overlay2/c5c6f89891a0cb55f82866583262a9f5e5cf41a9091ed4226da5393e1486b300/diff:/var/lib/docker/overlay2/3f496852d3b3fb50ec2ae2146099f75435a3ba39dc43dba25622c1927caa5558/diff:/var/lib/docker/overlay2/ae600615f547018b5ead150181a944d7f7ab8f7e1ee4d21d984d50c8f5b33eb1/diff:/var/lib/docker/overlay2/112b6de25e380a490a75d9fde55c892b43ef4a27165ab6240c1bfde349ea4fcb/diff:/var/lib/docker/overlay2/b607dc2aa995680a8823328fa25ff19bbba029a3fa570159b2b8d4e6fed8c01c/diff:/var/lib/docker/overlay2/e42f1af5394f1734dc746e5fe26c224fcbc681aea008b43927f355205fe71b6f/diff:/var/lib/docker/overlay2/e16a30d71ef2a056ff8b5becb837bf9970412324351fb0afda46218c77d70973/diff:/var/lib/docker/overlay2/85742fa7c7f1759eb6811ec3f23bc0320e54f15e7d0dd6c478fa46b1d8279dae/diff:/var/lib/docker/overlay2/fe77e7393c3901df8934e15dba35f10645a90d79728554acf3335d5efbe26406/diff",
+        "MergedDir": "/var/lib/docker/overlay2/d79c7fac822144de866d8d9e3e91352d50ebb1aff6e527abfb4d53491aaac3e1/merged",
+        "UpperDir": "/var/lib/docker/overlay2/d79c7fac822144de866d8d9e3e91352d50ebb1aff6e527abfb4d53491aaac3e1/diff",
+        "WorkDir": "/var/lib/docker/overlay2/d79c7fac822144de866d8d9e3e91352d50ebb1aff6e527abfb4d53491aaac3e1/work"
+      },
+      "Name": "overlay2"
+    },
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:efafae78d70c98626c521c246827389128e7d7ea442db31bc433934647f0c791",
+        "sha256:0ec26ae1cf1f65db494a0e00f678d46e02ded9a7e7109d41f467b0bfa5718931",
+        "sha256:13929cc8c8014239512b17f930627a287f50103e81fbda338c4f745388467140",
+        "sha256:378c2f3c3563d5e12078e8fee44be6083f2faf663ce0b4c2737fa42f9b2c8f1f",
+        "sha256:fe0a391cdfe2a25af9361986281acff31d52fa65798e25527a25b6e02d609bb6",
+        "sha256:8cd5f41627a340c634f523ccc3d04713fd21d89c0634627321f61e3ce7c9f3c5",
+        "sha256:9ce3b4769e387673746bc69db942701fca23d9478401c61c29bca82ddafc9fbf",
+        "sha256:3e428a2973505f43b0262520676ba4e561d1ffc015e8d45f9326039645fe3033",
+        "sha256:1981ce9ebae53eebddf89b22190962fc6ed9f28c11610b1ce6afc61b7b8138cf",
+        "sha256:025b02a9ea3bdbd5c6d289b0b7499da7f2177e32eab40ae11e8b13ab06a248bc"
+      ]
+    },
+    "Metadata": {
+      "LastTagTime": "0001-01-01T00:00:00Z"
+    }
+  }
+]

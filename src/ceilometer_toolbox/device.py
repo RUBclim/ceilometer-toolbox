@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -16,6 +17,7 @@ from typing import Literal
 
 import matplotlib.patheffects as mpe
 import matplotlib.pyplot as plt
+import netCDF4
 import numpy as np
 import xarray as xr
 from ceilometer_toolbox.data import atomic_write_path
@@ -161,6 +163,47 @@ class Ceilometer:
                 f'with prefix {prefix!r}',
             )
         return datetime.strptime(match.group(1), '%Y%m%d_%H%M%S')
+
+    @staticmethod
+    def _fix_stratfinder_metadata(
+            beta_file: str,
+            stratfinder_file: str,
+            metadata: dict[str, str],
+    ) -> None:
+        with netCDF4.Dataset(beta_file) as src:
+            history = src.getncattr('history')
+
+        for path in (beta_file, stratfinder_file):
+            with netCDF4.Dataset(path, 'r+') as ds:
+                ds.setncattr('history', history)
+                for name, value in metadata.items():
+                    ds.setncattr(name, value)
+
+    @staticmethod
+    def _get_stratfinder_container_metadata(
+            container_image: str,
+    ) -> dict[str, str]:
+        result = subprocess.run(
+            ['docker', 'image', 'inspect', container_image],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        info = json.loads(result.stdout)[0]
+        labels = info.get('Config', {}).get('Labels', {}) or {}
+        repo_digests = info.get('RepoDigests', []) or []
+
+        metadata = {'stratfinder_container_image': container_image}
+
+        revision = labels.get('org.opencontainers.image.version')
+        if revision is not None:
+            metadata['stratfinder_source_revision'] = revision
+
+        if repo_digests:
+            metadata['stratfinder_container_digest'] = repo_digests[0].split('@', 1)[-1]
+
+        return metadata
 
     def get_raw_files(self, start: datetime, end: datetime, prefix: str) -> list[str]:
         # let's first glob to the closest common pattern
@@ -721,6 +764,12 @@ class Ceilometer:
         if directory_mount is None:
             directory_mount = os.getcwd()
 
+        stratfinder_metadata = (
+            self._get_stratfinder_container_metadata(container_image)
+            if in_docker
+            else {}
+        )
+
         end = end_date if end_date is not None else date.today()
         ret = 0
         while start_date <= end:
@@ -783,6 +832,13 @@ class Ceilometer:
                     print(f"Stratfinder failed for {start_date}, stopping")
                     raise RuntimeError(
                         f"Stratfinder failed for {start_date}. Exit code: {ret}",
+                    )
+
+                if in_docker:
+                    self._fix_stratfinder_metadata(
+                        beta_file,
+                        output_file,
+                        stratfinder_metadata,
                     )
 
                 start_date += timedelta(days=1)
