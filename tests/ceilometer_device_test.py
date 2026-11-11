@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import tempfile
@@ -1017,6 +1018,19 @@ def test_fix_stratfinder_metadata(tmp_path):
             for name, value in metadata.items():
                 assert ds.attrs[name] == value
 
+
+def test_get_stratfinder_metadata_missing_components(tmp_path):
+    modified_meta = json.loads(DOCKER_INSPECT_RESULT)[0]
+    del modified_meta['Config']['Labels']['org.opencontainers.image.version']
+    del modified_meta['RepoDigests']
+    with mock.patch('ceilometer_toolbox.device.subprocess.run') as run:
+        run.return_value = mock.MagicMock(
+            stdout=json.dumps([modified_meta]),
+            returncode=0,
+        )
+        meta = Ceilometer._get_stratfinder_container_metadata('some_image')
+
+    assert meta == {'stratfinder_container_image': 'some_image'}
 # ---------------------------------------------------------------------------
 # process_stratfinder_qc
 # ---------------------------------------------------------------------------
